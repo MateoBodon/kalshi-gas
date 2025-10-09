@@ -53,6 +53,9 @@ class NowcastModel:
         resid = self.fit_results.resid
         if isinstance(resid, pd.Series):
             resid = resid.to_numpy()
+        resid = np.asarray(resid, dtype=float)
+        if resid.size == 0:
+            resid = np.array([0.0])
         self.residuals = resid[-self.residual_window :]
         if self.residuals.size == 0:
             self.residuals = resid
