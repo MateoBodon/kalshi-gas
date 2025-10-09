@@ -1,0 +1,26 @@
+# Gas Market Forecast Report
+
+Generated on {{ metadata.generated_at }}
+
+## Ensemble Metrics
+| Metric | Value |
+| --- | --- |
+{% for name, value in metrics.items() -%}
+| {{ name }} | {{ "%.4f"|format(value) }} |
+{% endfor %}
+
+## Risk Gating
+- NHC alert: **{{ "ON" if risk.nhc_alert else "OFF" }}** ({{ risk.details["nhc"]["active_storms"] }} active storms, threshold {{ risk.details["nhc"]["threshold"] }})
+- WPSR alert: **{{ "ON" if risk.wpsr_alert else "OFF" }}** (latest change {{ "%.2f"|format(risk.details["wpsr"]["latest_change"]) }} vs threshold {{ risk.details["wpsr"]["threshold"] }})
+
+## Calibration Table
+| Forecast Bin | Observed Frequency | Count |
+| --- | --- | --- |
+{% for row in calibration -%}
+| {{ "%.2f"|format(row["forecast_mean"]|default(0, true)) }} | {{ "%.2f"|format(row["outcome_rate"]|default(0, true)) }} | {{ row["count"]|default(0, true) }} |
+{% endfor %}
+
+## Figures
+![Forecast vs Actual]({{ figures.forecast }})
+
+![Calibration Curve]({{ figures.calibration }})
