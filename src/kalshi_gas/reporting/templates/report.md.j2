@@ -13,6 +13,18 @@ Generated on {{ metadata.generated_at }}
 - NHC alert: **{{ "ON" if risk.nhc_alert else "OFF" }}** ({{ risk.details["nhc"]["active_storms"] }} active storms, threshold {{ risk.details["nhc"]["threshold"] }})
 - WPSR alert: **{{ "ON" if risk.wpsr_alert else "OFF" }}** (latest change {{ "%.2f"|format(risk.details["wpsr"]["latest_change"]) }} vs threshold {{ risk.details["wpsr"]["threshold"] }})
 
+## Risk Flags
+- Tightness flag: **{{ "ON" if risk_flags["tightness"]["active"] else "OFF" }}** (draw {{ "%.2f"|format(risk_flags["tightness"]["gasoline_stocks_draw"]) }} mmbbl, refinery util {{ "%.1f"|format(risk_flags["tightness"]["refinery_util_pct"]) }}%)
+- NHC flag: **{{ "ON" if risk_flags["nhc"]["active"] else "OFF" }}** (operational alert {{ "ON" if risk_flags["nhc"]["nhc_alert"] else "OFF" }}, analyst override {{ "ON" if risk_flags["nhc"]["analyst_flag"] else "OFF" }})
+{% if risk_flags["adjustments"] %}
+### Tail Adjustments
+{% for note in risk_flags["adjustments"] %}
+- {{ note }}
+{% endfor %}
+{% else %}
+No additional tail adjustments applied.
+{% endif %}
+
 ## Calibration Table
 | Forecast Bin | Observed Frequency | Count |
 | --- | --- | --- |

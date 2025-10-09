@@ -31,6 +31,7 @@ class ReportBuilder:
         figures: Dict[str, str],
         posterior: Dict[str, float],
         sensitivity: pd.DataFrame,
+        risk_flags: Dict[str, object],
         output_path: Path,
     ) -> Path:
         template = self.env.get_template("report.md.j2")
@@ -41,6 +42,7 @@ class ReportBuilder:
             calibration=calibration.fillna(0).to_dict(orient="records"),
             posterior=posterior,
             sensitivity=sensitivity.to_dict(orient="records"),
+            risk_flags=risk_flags,
             figures=figures,
             metadata={"generated_at": datetime.utcnow().isoformat()},
         )

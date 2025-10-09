@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import yaml
@@ -42,16 +42,22 @@ def _prior_cdf_factory(model: MarketPriorCDF):
     return prior_cdf
 
 
-def _select_beta(delta: float, params: Dict[str, float | None]) -> float:
+def _select_beta(
+    delta: float,
+    params: Dict[str, float | None],
+    beta_up_scale: float = 1.0,
+    beta_dn_scale: float = 1.0,
+) -> float:
     raw_beta = params.get("beta")
     beta = float(raw_beta) if raw_beta is not None else 0.0
     beta_up = params.get("beta_up")
     beta_dn = params.get("beta_dn")
     if delta >= 0 and beta_up is not None:
-        return float(beta_up)
+        return float(beta_up) * beta_up_scale
     if delta < 0 and beta_dn is not None:
-        return float(beta_dn)
-    return beta
+        return float(beta_dn) * beta_dn_scale
+    scale = beta_up_scale if delta >= 0 else beta_dn_scale
+    return beta * scale
 
 
 def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
@@ -67,7 +73,56 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
 
     risk = evaluate_risk(dataset, cfg)
 
+    wpsr_details = risk.details.get("wpsr", {})
+    nhc_details = risk.details.get("nhc", {})
+
+    stocks_draw = float(wpsr_details.get("gasoline_stocks_draw", 0.0))
+    refinery_util_pct = float(wpsr_details.get("refinery_util_pct", 100.0))
+    tightness_flag = stocks_draw > 3.0 and refinery_util_pct < 90.0
+
+    nhc_flag = bool(risk.nhc_alert) or bool(nhc_details.get("analyst_flag", False))
+
+    beta_up_scale = 1.0
+    beta_dn_scale = 1.0
+    alpha_shift = 0.0
+    drift_bump = 0.0
+    risk_adjustments: List[str] = []
+
+    if tightness_flag:
+        beta_up_scale = max(beta_up_scale, 1.25)
+        beta_dn_scale = min(beta_dn_scale, 0.95)
+        alpha_shift += 0.03
+        drift_bump = max(drift_bump, 0.02)
+        risk_adjustments.append(
+            "WPSR tightness: boosted upside pass-through and +3¢ alpha lift"
+        )
+
+    if nhc_flag:
+        beta_up_scale = max(beta_up_scale, 1.2)
+        alpha_shift += 0.02
+        drift_bump = max(drift_bump, 0.03)
+        risk_adjustments.append(
+            "NHC risk: widened nowcast drift and tilted upside beta"
+        )
+
+    risk_flags = {
+        "tightness": {
+            "active": tightness_flag,
+            "gasoline_stocks_draw": stocks_draw,
+            "refinery_util_pct": refinery_util_pct,
+        },
+        "nhc": {
+            "active": nhc_flag,
+            "nhc_alert": bool(risk.nhc_alert),
+            "analyst_flag": bool(nhc_details.get("analyst_flag", False)),
+        },
+        "adjustments": risk_adjustments,
+    }
+
     live_ensemble = EnsembleModel(weights=ensemble_weights)
+    if drift_bump > 0:
+        lower, upper = live_ensemble.nowcast.drift_bounds
+        live_ensemble.nowcast.drift_bounds = (lower, upper + drift_bump)
     live_ensemble.fit(dataset)
     nowcast_sim = live_ensemble.nowcast.simulate()
 
@@ -84,8 +139,15 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     def posterior_factory(
         rbob_delta: float, alpha_delta: float
     ) -> PosteriorDistribution:
-        beta_effect = _select_beta(rbob_delta, structural)
-        adjusted_samples = base_samples + alpha_delta + beta_effect * rbob_delta
+        beta_effect = _select_beta(
+            rbob_delta,
+            structural,
+            beta_up_scale=beta_up_scale,
+            beta_dn_scale=beta_dn_scale,
+        )
+        adjusted_samples = (
+            base_samples + alpha_shift + alpha_delta + beta_effect * rbob_delta
+        )
         return PosteriorDistribution(
             samples=adjusted_samples,
             prior_cdf=prior_fn,
@@ -131,6 +193,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         },
         posterior=posterior_summary,
         sensitivity=sensitivity,
+        risk_flags=risk_flags,
         output_path=report_path,
     )
 
@@ -141,4 +204,5 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "sensitivity_path": sensitivity_path,
         "posterior_summary": posterior_summary,
         "structural": structural,
+        "risk_flags": risk_flags,
     }

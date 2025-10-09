@@ -11,6 +11,14 @@ def run_report(config_path: str | None = None) -> None:
     print("ETL outputs:", result["etl_outputs"])
     print("Forecast results saved to", result["results_csv"])
     print("Sensitivity grid saved to", result["sensitivity_path"])
+    risk_flags = result.get("risk_flags", {})
+    adjustments = (
+        risk_flags.get("adjustments", []) if isinstance(risk_flags, dict) else []
+    )
+    if adjustments:
+        print("Risk adjustments:", "; ".join(adjustments))
+    else:
+        print("Risk adjustments: none")
     print("Report generated at", result["report_path"])
 
 

@@ -8,6 +8,8 @@ data/interim/
 data/processed/
 data_raw/*
 !data_raw/kalshi_bins.yml
+!data_raw/nhc_flag.yml
+!data_raw/wpsr_state.yml
 data_proc/
 .eggs/
 *.egg-info/
