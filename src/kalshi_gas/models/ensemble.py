@@ -27,7 +27,8 @@ class EnsembleModel:
         self.market_prior = MarketPriorModel()
 
     def fit(self, dataset: pd.DataFrame) -> None:
-        self.nowcast.fit(dataset)
+        price_series = dataset["regular_gas_price"]
+        self.nowcast.fit(price_series)
         self.pass_through.fit(dataset)
         self.market_prior.fit(dataset)
         preds = self.predict(dataset)
@@ -37,7 +38,12 @@ class EnsembleModel:
             self.residual_std = float(np.nanstd(dataset["target_future_price"]))
 
     def predict(self, dataset: pd.DataFrame) -> pd.DataFrame:
-        nowcast_pred = self.nowcast.predict(dataset)
+        nowcast_sim = self.nowcast.predict(dataset["regular_gas_price"])
+        nowcast_pred = pd.Series(
+            nowcast_sim.mean,
+            index=dataset.index,
+            name="nowcast",
+        )
         pass_pred = self.pass_through.predict(dataset)
         market_pred = self.market_prior.predict(dataset)
 
