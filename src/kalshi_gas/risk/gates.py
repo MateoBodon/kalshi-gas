@@ -72,6 +72,7 @@ def wpsr_gate(
     state_path = Path("data_raw/wpsr_state.yml")
     state = load_wpsr_state(state_path)
     refinery_util = float(state.get("refinery_util_pct", 92.0))
+    product_supplied = float(state.get("product_supplied_mbd", 8.8))
 
     alert = latest_change <= threshold
     return alert, {
@@ -79,6 +80,7 @@ def wpsr_gate(
         "threshold": threshold,
         "gasoline_stocks_draw": draw,
         "refinery_util_pct": refinery_util,
+        "product_supplied_mbd": product_supplied,
     }
 
 

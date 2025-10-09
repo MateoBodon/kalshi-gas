@@ -18,6 +18,7 @@ from kalshi_gas.models.prior import MarketPriorCDF
 from kalshi_gas.models.structural import fit_structural_pass_through
 from kalshi_gas.reporting.report_builder import ReportBuilder
 from kalshi_gas.reporting.visuals import plot_calibration, plot_price_forecast
+from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 from kalshi_gas.risk.gates import evaluate_risk
 
 
@@ -110,6 +111,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             "active": tightness_flag,
             "gasoline_stocks_draw": stocks_draw,
             "refinery_util_pct": refinery_util_pct,
+            "product_supplied_mbd": float(
+                wpsr_details.get("product_supplied_mbd", 0.0)
+            ),
         },
         "nhc": {
             "active": nhc_flag,
@@ -178,6 +182,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     plot_price_forecast(backtest.test_frame, forecast_fig)
     plot_calibration(backtest.calibration, calibration_fig)
 
+    fundamentals_fig = figures_dir / "fundamentals_dashboard.png"
+    plot_fundamentals_dashboard(dataset, risk_flags, fundamentals_fig)
+
     results_csv = memo_dir / "forecast_results.csv"
     backtest.test_frame.to_csv(results_csv, index=False)
 
@@ -190,6 +197,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         figures={
             "forecast": Path("..") / "figures" / forecast_fig.name,
             "calibration": Path("..") / "figures" / calibration_fig.name,
+            "fundamentals": Path("..") / "figures" / fundamentals_fig.name,
         },
         posterior=posterior_summary,
         sensitivity=sensitivity,
@@ -205,4 +213,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "posterior_summary": posterior_summary,
         "structural": structural,
         "risk_flags": risk_flags,
+        "figures": {
+            "forecast": forecast_fig,
+            "calibration": calibration_fig,
+            "fundamentals": fundamentals_fig,
+        },
     }
