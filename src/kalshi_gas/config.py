@@ -23,6 +23,7 @@ class ModelConfig:
     ensemble_weights: Dict[str, float]
     calibration_bins: int
     horizon_days: int
+    prior_weight: float
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "calibration_bins": 10,
         "horizon_days": 7,
+        "prior_weight": 0.35,
     },
     "risk_gates": {
         "nhc_active_threshold": 1,
@@ -82,6 +84,7 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
             ensemble_weights=model_cfg["ensemble_weights"],
             calibration_bins=int(model_cfg["calibration_bins"]),
             horizon_days=int(model_cfg["horizon_days"]),
+            prior_weight=float(model_cfg.get("prior_weight", 0.35)),
         ),
         risk_gates=risk_cfg,
     )

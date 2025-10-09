@@ -8,5 +8,6 @@ data/interim/
 data/processed/
 data_raw/*
 !data_raw/kalshi_bins.yml
+data_proc/
 .eggs/
 *.egg-info/

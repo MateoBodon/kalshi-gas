@@ -20,6 +20,18 @@ Generated on {{ metadata.generated_at }}
 | {{ "%.2f"|format(row["forecast_mean"]|default(0, true)) }} | {{ "%.2f"|format(row["outcome_rate"]|default(0, true)) }} | {{ row["count"]|default(0, true) }} |
 {% endfor %}
 
+## Posterior Summary
+{% for name, value in posterior.items() %}
+- {{ name }}: {{ "%.4f"|format(value) }}
+{% endfor %}
+
+## Sensitivity Grid
+| Threshold | ΔRBOB | ΔAlpha | Prob ≥ Threshold |
+| --- | --- | --- | --- |
+{% for row in sensitivity -%}
+| {{ "%.2f"|format(row["threshold"]) }} | {{ "%.3f"|format(row["rbob_delta"]) }} | {{ "%.3f"|format(row["alpha_delta"]) }} | {{ "%.4f"|format(row["prob_above"]) }} |
+{% endfor %}
+
 ## Figures
 ![Forecast vs Actual]({{ figures.forecast }})
 
