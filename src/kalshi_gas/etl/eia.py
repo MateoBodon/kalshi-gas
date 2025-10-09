@@ -23,6 +23,7 @@ EIA_INVENTORY_SERIES = (
     "PET.WGTSTUS1.W"  # Finished motor gasoline stocks, thousand barrels
 )
 PRICE_PATTERN = re.compile(r"([0-9]+(?:\.[0-9]+)?)")
+PERCENT_PATTERN = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*%")
 
 
 class EIAExtractor:
@@ -162,3 +163,73 @@ def parse_weekly_series(html: str) -> pd.DataFrame:
     frame.sort_values("date", inplace=True)
     frame.reset_index(drop=True, inplace=True)
     return frame
+
+
+def parse_wpsr_summary(html: str) -> dict[str, object]:
+    """Parse key metrics from the WPSR summary table."""
+    soup = BeautifulSoup(html, "html.parser")
+    tables = soup.find_all("table")
+    target_table: Tag | None = None
+
+    for table in tables:
+        text = " ".join(
+            header.get_text(" ", strip=True).lower() for header in table.find_all("th")
+        )
+        if re.search(r"gasoline", text) or re.search(r"utilization", text):
+            target_table = table
+            break
+
+    if target_table is None:
+        raise ValueError("WPSR summary table not found")
+
+    stocks_value: float | None = None
+    utilization_value: float | None = None
+    supplied_value: float | None = None
+    week_ending_value: pd.Timestamp | None = None
+
+    for row in target_table.find_all("tr"):
+        cells = row.find_all(["th", "td"])
+        if len(cells) < 2:
+            continue
+        label = cells[0].get_text(" ", strip=True).lower()
+        values_text = " ".join(cell.get_text(" ", strip=True) for cell in cells[1:])
+
+        if week_ending_value is None and re.search(r"week\s+ending", label):
+            parsed = pd.to_datetime(values_text, errors="coerce")
+            if not pd.isna(parsed):
+                week_ending_value = pd.Timestamp(parsed).normalize()
+            continue
+
+        if stocks_value is None and re.search(r"gasoline\s+stocks", label):
+            match = PRICE_PATTERN.search(values_text)
+            if match:
+                stocks_value = float(match.group(1))
+            continue
+
+        if utilization_value is None and re.search(r"refinery\s+util", label):
+            match = PERCENT_PATTERN.search(values_text)
+            if match:
+                utilization_value = float(match.group(1))
+            continue
+
+        if supplied_value is None and re.search(r"product\s+supplied|demand", label):
+            match = PRICE_PATTERN.search(values_text)
+            if match:
+                supplied_value = float(match.group(1))
+            continue
+
+    if week_ending_value is None:
+        raise ValueError("WPSR summary missing week ending date")
+    if stocks_value is None:
+        raise ValueError("WPSR summary missing gasoline stocks")
+    if utilization_value is None:
+        raise ValueError("WPSR summary missing refinery utilization")
+    if supplied_value is None:
+        raise ValueError("WPSR summary missing product supplied")
+
+    return {
+        "week_ending": week_ending_value,
+        "gasoline_stocks_mmb": stocks_value,
+        "refinery_util_pct": utilization_value,
+        "product_supplied_mbd": supplied_value,
+    }
