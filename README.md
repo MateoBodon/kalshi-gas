@@ -17,6 +17,19 @@ The command pulls (or falls back to bundled samples for offline mode) each data 
 - `build/memo/forecast_results.csv`: scored test set
 - `build/memo/report.md`: rendered memo
 
+## One-command Rebuild
+
+Use `make report` at any time to rerun ETL, modelling, posterior generation, risk gating, and report compilation with the current data snapshots. The command is idempotent and will refresh figures and memo outputs in `build/`.
+
+## How to Reproduce
+
+1. Create or activate the virtual environment and install dependencies (see Quickstart).
+2. (Optional) Update `data_raw/nhc_flag.yml` or `data_raw/wpsr_state.yml` with the latest analyst inputs if live data are gated.
+3. Ensure any “as-of” timestamp is recorded in the memo by setting the ISO string you used for data pulls inside `data_raw/wpsr_state.yml` (add an `as_of:` field if desired). Judges can confirm the run time via the memo header’s `Generated on …` entry.
+4. Run `make report` for a full rebuild or `make figures` if you only need refreshed PNGs.
+
+The repo is fully self-contained; live API credentials are optional. All sample data are bundled, so the commands above will always succeed offline.
+
 ## Live Data
 
 Set `KALSHI_GAS_USE_LIVE=1` to enable live HTTP pulls. Additional credentials:
