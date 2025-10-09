@@ -6,6 +6,7 @@ build/
 data/raw/
 data/interim/
 data/processed/
-data_raw/
+data_raw/*
+!data_raw/kalshi_bins.yml
 .eggs/
 *.egg-info/
