@@ -9,10 +9,6 @@ import pandas as pd
 from statsmodels.tsa.statespace.structural import UnobservedComponents
 
 
-def _bounded_mean(mean: float, lower: float, upper: float) -> float:
-    return float(np.clip(mean, lower, upper))
-
-
 @dataclass
 class NowcastSimulation:
     date: pd.Timestamp
@@ -36,6 +32,7 @@ class NowcastModel:
         self.model: UnobservedComponents | None = None
         self.fit_results = None
         self.residuals: np.ndarray | None = None
+        self.last_observation: float | None = None
 
     def fit(self, series: pd.Series) -> None:
         series = series.dropna()
@@ -59,27 +56,52 @@ class NowcastModel:
         self.residuals = resid[-self.residual_window :]
         if self.residuals.size == 0:
             self.residuals = resid
+        self.last_observation = float(series.iloc[-1])
 
     def simulate(self, steps: int | None = None) -> NowcastSimulation:
         if self.model is None or self.fit_results is None:
             raise RuntimeError("Nowcast model must be fit before simulation")
+        if self.last_observation is None:
+            raise RuntimeError("Nowcast model missing last observation")
 
         steps = steps or self.horizon
         forecast = self.fit_results.get_forecast(steps=steps)
-        mean_forecast = forecast.predicted_mean.iloc[-1]
-        var_forecast = forecast.var_pred_mean.iloc[-1]
+        mean_path = forecast.predicted_mean.to_numpy(dtype=float)
+        var_path = forecast.var_pred_mean.to_numpy(dtype=float)
 
         lower, upper = self.drift_bounds
-        bounded_mean = _bounded_mean(mean_forecast, lower, upper)
+        prev_levels = np.concatenate(([self.last_observation], mean_path[:-1]))
+        raw_drifts = mean_path - prev_levels
+        drift_means = np.clip(raw_drifts, lower, upper)
+        drift_range = max(upper - lower, 0.0)
+        drift_std = drift_range / 6 if drift_range > 0 else 0.0
+
+        step_variances = np.diff(np.concatenate(([0.0], var_path)))
+        step_variances = np.maximum(step_variances, 0.0)
 
         residuals = self.residuals if self.residuals is not None else np.array([0.0])
-        bootstrap_indices = np.random.randint(0, len(residuals), size=self.simulations)
-        bootstrap_resid = residuals[bootstrap_indices]
+        levels = np.full(self.simulations, self.last_observation, dtype=float)
 
-        noise = np.random.normal(
-            0, np.sqrt(max(var_forecast, 1e-8)), size=self.simulations
-        )
-        samples = bounded_mean + noise + bootstrap_resid
+        for idx in range(steps):
+            if drift_std > 0:
+                drift_samples = np.random.normal(
+                    loc=drift_means[idx], scale=drift_std, size=self.simulations
+                )
+                drift_samples = np.clip(drift_samples, lower, upper)
+            else:
+                drift_samples = np.full(self.simulations, drift_means[idx], dtype=float)
+
+            gaussian_noise = np.random.normal(
+                0.0, np.sqrt(max(step_variances[idx], 1e-8)), size=self.simulations
+            )
+            bootstrap_noise = residuals[
+                np.random.randint(0, len(residuals), size=self.simulations)
+            ]
+            levels = levels + drift_samples + gaussian_noise + bootstrap_noise
+
+        samples = levels
+        mean_forecast = float(np.mean(samples))
+        var_forecast = float(np.var(samples, ddof=0))
 
         target_date = forecast.row_labels[-1]
         if not isinstance(target_date, pd.Timestamp):
@@ -87,8 +109,8 @@ class NowcastModel:
 
         return NowcastSimulation(
             date=target_date,
-            mean=float(bounded_mean),
-            variance=float(var_forecast),
+            mean=mean_forecast,
+            variance=var_forecast,
             samples=samples,
         )
 
