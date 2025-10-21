@@ -159,6 +159,24 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         },
         "adjustments": risk_adjustments,
     }
+    risk_context = {
+        "wpsr": {
+            "draw_mmb": stocks_draw,
+            "draw_trigger": float(cfg.risk_gates.get("wpsr_inventory_cutoff", -1.5)),
+            "latest_change": float(wpsr_details.get("latest_change", 0.0)),
+            "refinery_util_pct": refinery_util_pct,
+            "util_trigger": 90.0,
+            "product_supplied_mbd": float(
+                wpsr_details.get("product_supplied_mbd", 0.0)
+            ),
+        },
+        "nhc": {
+            "active_storms": int(nhc_details.get("active_storms", 0)),
+            "threshold": int(cfg.risk_gates.get("nhc_active_threshold", 1)),
+            "analyst_flag": bool(nhc_details.get("analyst_flag", False)),
+        },
+        "adjustments": risk_adjustments,
+    }
 
     live_ensemble = EnsembleModel(weights=ensemble_weights)
     if drift_bump > 0:
@@ -380,6 +398,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         posterior=posterior_summary,
         sensitivity=sensitivity,
         risk_flags=risk_flags,
+        risk_context=risk_context,
         provenance=provenance_records,
         benchmarks=benchmarks,
         sensitivity_bars=sensitivity_bars,
@@ -401,6 +420,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     builder.build_deck(
         posterior=posterior_summary,
         risk_flags=risk_flags,
+        risk_context=risk_context,
         benchmarks=benchmarks,
         figures=figures_relative,
         provenance=provenance_records,
@@ -447,6 +467,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "posterior_summary": posterior_summary,
         "structural": structural,
         "risk_flags": risk_flags,
+        "risk_context": risk_context,
         "figures": {
             "forecast": forecast_fig,
             "calibration": calibration_fig,

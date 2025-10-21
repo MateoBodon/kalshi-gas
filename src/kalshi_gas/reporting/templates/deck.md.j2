@@ -26,6 +26,13 @@ Generated on {{ metadata.generated_at }}
 {% else %}
 - Tail adjustments: none
 {% endif %}
+{% if risk_context %}
+{% set wpsr = risk_context.get("wpsr", {}) %}
+{% set nhc = risk_context.get("nhc", {}) %}
+- WPSR draw: {{ "%.2f"|format(wpsr.get("draw_mmb", 0.0)) }} mmbbl (trigger ≥ {{ "%.2f"|format(-wpsr.get("draw_trigger", 0.0)) }})
+- Refinery utilisation: {{ "%.1f"|format(wpsr.get("refinery_util_pct", 0.0)) }}% (trigger < {{ "%.1f"|format(wpsr.get("util_trigger", 90.0)) }})
+- NHC storms: {{ nhc.get("active_storms", 0) }} (trigger ≥ {{ nhc.get("threshold", 1) }})
+{% endif %}
 
 ![Risk Box]({{ figures.risk_box }})
 

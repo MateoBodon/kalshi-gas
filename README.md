@@ -43,7 +43,9 @@ Without these, the pipeline defaults to deterministic sample data.
 
 ## Fallback & Freshness
 
-Each ETL component follows a deterministic fallback chain: live API → `data_raw/last_good.*` snapshot → bundled samples in `data/sample/`. Provenance sidecars under `data_proc/meta/` capture the current mode and as‑of timestamps. Run `make check-fresh` to assert that the latest last-good snapshots meet freshness guardrails; sample mode automatically skips the check for offline runs.
+Each ETL component follows a deterministic fallback chain: live API → `data_raw/last_good.*` snapshot → bundled samples in `data/sample/`. Provenance sidecars under `data_proc/meta/` capture the current mode and as-of timestamps. Run `make check-fresh` to assert that the latest last-good snapshots meet freshness guardrails; sample mode automatically skips the check for offline runs.
+
+> ℹ️ The EIA Weekly Petroleum Status Report generally posts Wednesdays at 10:30 ET; release times shift when U.S. federal holidays fall early in the week. Update your `last_good` snapshot accordingly if live pulls are delayed.
 
 ## Project Layout
 
