@@ -32,12 +32,15 @@ Generated on {{ metadata.generated_at }}
 ---
 
 ## Performance Snapshot
-| Model | Brier | Brier SE | RMSE |
-| --- | --- | --- | --- |
+| Model | Brier | CRPS |
+| --- | --- | --- |
 {% for row in benchmarks -%}
-{% set brier = row.get('brier') %}{% set brier_se = row.get('brier_se') %}{% set rmse = row.get('rmse') %}
-| {{ row.get('model') }} | {{ "%.3f"|format(brier) if brier is not none else "" }} | {{ "%.3f"|format(brier_se) if brier_se is not none else "" }} | {{ "%.3f"|format(rmse) if rmse is not none else "" }} |
+{% set brier = row.get('brier') %}{% set crps = row.get('crps') %}
+| {{ row.get('model') }} | {{ "%.3f"|format(brier) if brier is not none else "" }} | {{ "%.3f"|format(crps) if crps is not none else "" }} |
 {% endfor %}
+{% if jackknife %}
+- Jackknife: {{ jackknife }}
+{% endif %}
 
 ![Calibration Curve]({{ figures.calibration }})
 

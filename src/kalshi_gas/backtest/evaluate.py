@@ -126,6 +126,7 @@ def run_backtest(
     )
 
     prior_probs: np.ndarray | None = None
+    rbob_probs: np.ndarray | None = None
 
     if "regular_gas_price" in test.columns:
         carry_prob = (test["regular_gas_price"].values >= threshold).astype(float)
@@ -135,9 +136,33 @@ def run_backtest(
                 np.mean((test["regular_gas_price"].values - test["actual"].values) ** 2)
             )
         )
+        metrics["crps_carry"] = float(
+            np.mean(np.abs(test["regular_gas_price"].values - test["actual"].values))
+        )
+    if "pass_through" in test_preds.columns:
+        rbob_mean = test_preds["pass_through"]
+        rbob_probs = compute_event_probabilities(
+            rbob_mean,
+            sigma=sigma,
+            threshold=threshold,
+        )
+        rbob_probs_array = (
+            rbob_probs.to_numpy(dtype=float)
+            if hasattr(rbob_probs, "to_numpy")
+            else np.asarray(rbob_probs, dtype=float)
+        )
+        metrics["brier_rbob"] = brier_score(
+            rbob_probs_array, test["event_outcome"].values
+        )
+        metrics["crps_rbob"] = crps_gaussian(
+            mu=rbob_mean.values,
+            sigma=np.full(len(rbob_mean), sigma),
+            observation=test["actual"].values,
+        )
     if "kalshi_prob" in test.columns:
         prior_probs = test["kalshi_prob"].to_numpy(dtype=float)
         metrics["brier_prior"] = brier_score(prior_probs, test["event_outcome"].values)
+        metrics["crps_prior"] = metrics["brier_prior"]
 
     calib = calibration_table(
         probabilities=test["event_probability"].values,
@@ -162,9 +187,17 @@ def run_backtest(
             metrics["posterior_brier"] = brier_score(posterior_probs, outcomes)
             metrics["prior_weight_calibrated"] = calibrated_weight
             metrics["posterior_brier_se"] = jackknife_brier(posterior_probs, outcomes)
+            metrics["crps_posterior"] = metrics["posterior_brier"]
 
     if "posterior_event_probability" not in test.columns:
         test["posterior_event_probability"] = test["event_probability"]
+    if rbob_probs is not None:
+        rbob_probs_array = (
+            rbob_probs.to_numpy(dtype=float)
+            if hasattr(rbob_probs, "to_numpy")
+            else np.asarray(rbob_probs, dtype=float)
+        )
+        test["rbob_event_probability"] = rbob_probs_array
 
     return BacktestResult(
         test_frame=test,

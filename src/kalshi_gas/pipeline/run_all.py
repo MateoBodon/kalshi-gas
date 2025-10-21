@@ -43,6 +43,13 @@ def _load_prior_bins(path: Path) -> Tuple[np.ndarray, np.ndarray]:
     return thresholds, probabilities
 
 
+def _load_json(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def _prior_cdf_factory(model: MarketPriorCDF):
     def prior_cdf(values: np.ndarray) -> np.ndarray:
         arr = np.asarray(values, dtype=float).reshape(-1)
@@ -229,28 +236,42 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         )
 
     metrics = backtest.metrics
-    benchmarks: list[dict[str, float | str | None]] = [
+    benchmarks: list[dict[str, float | str | None]] = []
+    benchmarks.append(
+        {
+            "model": "Posterior",
+            "brier": metrics.get("posterior_brier", metrics.get("brier_score")),
+            "crps": metrics.get("crps_posterior", metrics.get("crps")),
+        }
+    )
+    benchmarks.append(
         {
             "model": "Ensemble",
             "brier": metrics.get("brier_score"),
-            "brier_se": metrics.get("brier_score_se"),
-            "rmse": metrics.get("rmse"),
-        },
+            "crps": metrics.get("crps"),
+        }
+    )
+    benchmarks.append(
         {
-            "model": "Posterior",
-            "brier": metrics.get("posterior_brier"),
-            "brier_se": metrics.get("posterior_brier_se"),
-        },
+            "model": "RBOB Only",
+            "brier": metrics.get("brier_rbob"),
+            "crps": metrics.get("crps_rbob"),
+        }
+    )
+    benchmarks.append(
         {
             "model": "Carry Forward",
             "brier": metrics.get("brier_carry"),
-            "rmse": metrics.get("carry_rmse"),
-        },
+            "crps": metrics.get("crps_carry"),
+        }
+    )
+    benchmarks.append(
         {
             "model": "Kalshi Prior",
             "brier": metrics.get("brier_prior"),
-        },
-    ]
+            "crps": metrics.get("crps_prior"),
+        }
+    )
     benchmarks = [
         row
         for row in benchmarks
@@ -282,6 +303,16 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     dataset_meta_path = meta_dir / "dataset.json"
     if dataset_meta_path.exists():
         meta_paths.append(dataset_meta_path)
+
+    jackknife_data = _load_json(Path("data_proc") / "jackknife.json")
+    jackknife_summary = None
+    if isinstance(jackknife_data, dict):
+        delta = jackknife_data.get("max_abs_delta_brier")
+        worst = jackknife_data.get("worst_month")
+        if delta is not None:
+            jackknife_summary = f"max ΔBrier {float(delta):.4f}"
+            if worst:
+                jackknife_summary += f" (drop {worst})"
 
     figures_dir = cfg.data.build_dir / "figures"
     memo_dir = cfg.data.build_dir / "memo"
@@ -353,6 +384,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         benchmarks=benchmarks,
         sensitivity_bars=sensitivity_bars,
         asymmetry_ci=asymmetry_ci,
+        jackknife=jackknife_summary,
         meta_files=[str(path) for path in meta_paths],
         output_path=report_path,
     )
@@ -376,6 +408,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         headline_threshold=headline_threshold,
         headline_probability=headline_probability,
         asymmetry_ci=asymmetry_ci,
+        jackknife=jackknife_summary,
         output_path=deck_path,
     )
 
@@ -430,4 +463,5 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "artifacts_path": artifacts_path,
         "meta_files": [str(path) for path in meta_paths],
         "asymmetry_ci": asymmetry_ci,
+        "jackknife_summary": jackknife_summary,
     }
