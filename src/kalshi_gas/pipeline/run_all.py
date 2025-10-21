@@ -27,10 +27,7 @@ from kalshi_gas.reporting.visuals import (
 )
 from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 from kalshi_gas.risk.gates import evaluate_risk
-from kalshi_gas.utils.kalshi_bins import (
-    load_kalshi_bins,
-    select_central_threshold,
-)
+from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 
 
 def _load_json(path: Path) -> dict | None:
@@ -90,11 +87,11 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         if max_date is not None and not pd.isna(max_date):
             dataset_as_of = pd.Timestamp(max_date).normalize().date().isoformat()
 
-    bins_path = Path("data_raw/kalshi_bins.yml")
-    thresholds, probabilities = load_kalshi_bins(bins_path)
-    event_threshold, central_probability = select_central_threshold(
-        thresholds, probabilities
-    )
+    threshold_bundle = load_kalshi_thresholds(Path("data_raw/kalshi_bins.yml"))
+    thresholds = threshold_bundle.thresholds
+    probabilities = threshold_bundle.probabilities
+    event_threshold = threshold_bundle.central_threshold
+    central_probability = threshold_bundle.central_probability
 
     ensemble_weights = cfg.model.ensemble_weights
     ensemble_bt = EnsembleModel(weights=ensemble_weights)

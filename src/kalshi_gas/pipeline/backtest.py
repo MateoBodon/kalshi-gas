@@ -19,7 +19,7 @@ from kalshi_gas.models.prior import MarketPriorCDF
 from kalshi_gas.models.structural import fit_structural_pass_through
 from kalshi_gas.pipeline.run_all import _prior_cdf_factory, _select_beta
 from kalshi_gas.reporting.visuals import plot_calibration
-from kalshi_gas.utils.kalshi_bins import load_kalshi_bins, select_central_threshold
+from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 
 
 def sample_crps(samples: np.ndarray, observation: float) -> float:
@@ -85,9 +85,10 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
 
     figures_dir, _, data_proc_dir = _prepare_directories(cfg)
 
-    bins_path = Path("data_raw/kalshi_bins.yml")
-    thresholds, probabilities = load_kalshi_bins(bins_path)
-    central_threshold, _ = select_central_threshold(thresholds, probabilities)
+    threshold_bundle = load_kalshi_thresholds(Path("data_raw/kalshi_bins.yml"))
+    thresholds = threshold_bundle.thresholds
+    probabilities = threshold_bundle.probabilities
+    central_threshold = threshold_bundle.central_threshold
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     prior_fn = _prior_cdf_factory(prior_model)
     prior_samples = _prior_samples(prior_model)

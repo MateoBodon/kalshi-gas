@@ -15,10 +15,7 @@ from kalshi_gas.data.assemble import assemble_dataset
 from kalshi_gas.etl.pipeline import run_all_etl
 from kalshi_gas.models.ensemble import EnsembleModel
 from kalshi_gas.backtest.evaluate import compute_event_probabilities
-from kalshi_gas.utils.kalshi_bins import (
-    load_kalshi_bins,
-    select_central_threshold,
-)
+from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 
 SWEEP_VALUES = np.arange(0.0, 1.0001, 0.05)
 
@@ -63,11 +60,9 @@ def sweep_prior_weights() -> tuple[pd.DataFrame, float, float, float | None]:
     if dataset.empty:
         raise RuntimeError("Dataset empty")
 
-    bins_path = Path("data_raw/kalshi_bins.yml")
-    thresholds, probabilities = load_kalshi_bins(bins_path)
-    event_threshold, event_probability = select_central_threshold(
-        thresholds, probabilities
-    )
+    threshold_bundle = load_kalshi_thresholds(Path("data_raw/kalshi_bins.yml"))
+    event_threshold = threshold_bundle.central_threshold
+    event_probability = threshold_bundle.central_probability
 
     ensemble = EnsembleModel(weights=cfg.model.ensemble_weights)
     ensemble.fit(dataset)

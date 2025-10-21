@@ -5,7 +5,7 @@ from kalshi_gas.backtest.calibrate_prior import (
     SWEEP_VALUES,
     _evaluate_weights,
 )
-from kalshi_gas.utils.kalshi_bins import select_central_threshold
+from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 
 
 def test_prior_dominates_when_likelihood_is_poor() -> None:
@@ -28,13 +28,10 @@ def test_prior_dominates_when_likelihood_is_poor() -> None:
     assert best_weight >= 0.95
 
 
-def test_select_central_threshold_sorts_inputs() -> None:
-    thresholds = np.array([3.2, 3.0, 3.1], dtype=float)
-    probabilities = np.array([0.8, 0.2, 0.5], dtype=float)
+def test_thresholds_unique_and_central_tracked() -> None:
+    bundle = load_kalshi_thresholds()
+    thresholds = bundle.thresholds
+    used_thresholds = set(float(value) for value in thresholds)
+    used_thresholds.add(float(bundle.central_threshold))
 
-    median_threshold, median_probability = select_central_threshold(
-        thresholds, probabilities
-    )
-
-    assert median_threshold == 3.1
-    assert median_probability == 0.5
+    assert len(used_thresholds) == len(thresholds)
