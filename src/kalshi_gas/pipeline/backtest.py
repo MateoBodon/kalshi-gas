@@ -17,12 +17,9 @@ from kalshi_gas.models.ensemble import EnsembleModel
 from kalshi_gas.models.posterior import PosteriorDistribution
 from kalshi_gas.models.prior import MarketPriorCDF
 from kalshi_gas.models.structural import fit_structural_pass_through
-from kalshi_gas.pipeline.run_all import (
-    _load_prior_bins,
-    _prior_cdf_factory,
-    _select_beta,
-)
+from kalshi_gas.pipeline.run_all import _prior_cdf_factory, _select_beta
 from kalshi_gas.reporting.visuals import plot_calibration
+from kalshi_gas.utils.kalshi_bins import load_kalshi_bins, select_central_threshold
 
 
 def sample_crps(samples: np.ndarray, observation: float) -> float:
@@ -89,7 +86,8 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
     figures_dir, _, data_proc_dir = _prepare_directories(cfg)
 
     bins_path = Path("data_raw/kalshi_bins.yml")
-    thresholds, probabilities = _load_prior_bins(bins_path)
+    thresholds, probabilities = load_kalshi_bins(bins_path)
+    central_threshold, _ = select_central_threshold(thresholds, probabilities)
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     prior_fn = _prior_cdf_factory(prior_model)
     prior_samples = _prior_samples(prior_model)
@@ -102,7 +100,6 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
     records: List[Dict[str, float | str | pd.Timestamp]] = []
     calibration_probs: List[float] = []
     calibration_outcomes: List[int] = []
-    central_threshold = float(np.median(thresholds))
 
     def evaluate_subset(
         subset: pd.DataFrame, current_date: pd.Timestamp, freeze_date: pd.Timestamp

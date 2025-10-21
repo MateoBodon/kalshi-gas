@@ -14,6 +14,11 @@ from kalshi_gas.config import load_config
 from kalshi_gas.data.assemble import assemble_dataset
 from kalshi_gas.etl.pipeline import run_all_etl
 from kalshi_gas.models.ensemble import EnsembleModel
+from kalshi_gas.backtest.evaluate import compute_event_probabilities
+from kalshi_gas.utils.kalshi_bins import (
+    load_kalshi_bins,
+    select_central_threshold,
+)
 
 SWEEP_VALUES = np.arange(0.0, 1.0001, 0.05)
 
@@ -32,9 +37,9 @@ def _evaluate_weights(
     prior_probs: pd.Series,
 ) -> pd.DataFrame:
     rows = []
-    like = predictions.to_numpy(dtype=float)
-    prior = prior_probs.to_numpy(dtype=float)
-    outcome = outcomes.to_numpy(dtype=float)
+    like = np.asarray(predictions, dtype=float)
+    prior = np.asarray(prior_probs, dtype=float)
+    outcome = np.asarray(outcomes, dtype=float)
 
     for weight in weights:
         posterior = (1 - weight) * like + weight * prior
@@ -51,26 +56,49 @@ def _evaluate_weights(
     return frame
 
 
-def sweep_prior_weights() -> tuple[pd.DataFrame, float]:
+def sweep_prior_weights() -> tuple[pd.DataFrame, float, float, float | None]:
     cfg = load_config()
     run_all_etl(cfg)
     dataset = assemble_dataset(cfg)
     if dataset.empty:
         raise RuntimeError("Dataset empty")
 
+    bins_path = Path("data_raw/kalshi_bins.yml")
+    thresholds, probabilities = load_kalshi_bins(bins_path)
+    event_threshold, event_probability = select_central_threshold(
+        thresholds, probabilities
+    )
+
     ensemble = EnsembleModel(weights=cfg.model.ensemble_weights)
     ensemble.fit(dataset)
     predictions = ensemble.predict(dataset)["ensemble"]
-    outcomes = (dataset["target_future_price"] >= 3.5).astype(int)
-    prior_probs = dataset["kalshi_prob"]
 
-    sweep = _evaluate_weights(SWEEP_VALUES, predictions, outcomes, prior_probs)
+    sigma = getattr(ensemble, "residual_std", 0.1)
+    if not np.isfinite(sigma) or sigma < 1e-6:
+        sigma = float(np.nanstd(dataset["target_future_price"] - predictions))
+        if not np.isfinite(sigma) or sigma < 1e-6:
+            sigma = 0.1
+
+    likelihood = compute_event_probabilities(
+        predictions,
+        sigma=sigma,
+        threshold=event_threshold,
+    )
+    outcomes = (dataset["target_future_price"] >= event_threshold).astype(int)
+    prior_probs = dataset["kalshi_prob"].clip(0, 1)
+
+    sweep = _evaluate_weights(SWEEP_VALUES, likelihood, outcomes, prior_probs)
     best_row = sweep.loc[sweep["log_score"].idxmax()]
     best_weight = float(best_row["prior_weight"])
-    return sweep, best_weight
+    return sweep, best_weight, event_threshold, event_probability
 
 
-def write_outputs(sweep: pd.DataFrame, best_weight: float) -> None:
+def write_outputs(
+    sweep: pd.DataFrame,
+    best_weight: float,
+    event_threshold: float,
+    event_probability: float | None,
+) -> None:
     data_proc = Path("data_proc")
     data_proc.mkdir(parents=True, exist_ok=True)
     sweep_path = data_proc / "prior_weight.csv"
@@ -80,7 +108,10 @@ def write_outputs(sweep: pd.DataFrame, best_weight: float) -> None:
     payload = {
         "best_weight": best_weight,
         "generated_at": sweep_path.stat().st_mtime,
+        "event_threshold": event_threshold,
     }
+    if event_probability is not None:
+        payload["central_probability"] = event_probability
     meta_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     figures_dir = Path("build/figures")
@@ -100,9 +131,17 @@ def write_outputs(sweep: pd.DataFrame, best_weight: float) -> None:
 
 
 def main() -> None:
-    sweep, best_weight = sweep_prior_weights()
-    write_outputs(sweep, best_weight)
-    print(json.dumps({"best_weight": best_weight}, indent=2))
+    sweep, best_weight, event_threshold, event_probability = sweep_prior_weights()
+    write_outputs(sweep, best_weight, event_threshold, event_probability)
+    print(
+        json.dumps(
+            {
+                "best_weight": best_weight,
+                "event_threshold": event_threshold,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-import yaml
-
 from kalshi_gas.backtest.evaluate import run_backtest
 from kalshi_gas.config import PipelineConfig, load_config
 from kalshi_gas.data.assemble import assemble_dataset
@@ -29,18 +27,10 @@ from kalshi_gas.reporting.visuals import (
 )
 from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 from kalshi_gas.risk.gates import evaluate_risk
-
-
-def _load_prior_bins(path: Path) -> Tuple[np.ndarray, np.ndarray]:
-    if not path.exists():
-        raise FileNotFoundError(f"Missing Kalshi bins file at {path}")
-    with open(path, "r", encoding="utf-8") as handle:
-        payload = yaml.safe_load(handle) or {}
-    thresholds = np.asarray(payload.get("thresholds", []), dtype=float)
-    probabilities = np.asarray(payload.get("probabilities", []), dtype=float)
-    if len(thresholds) == 0 or len(probabilities) != len(thresholds):
-        raise ValueError("Invalid Kalshi bins configuration")
-    return thresholds, probabilities
+from kalshi_gas.utils.kalshi_bins import (
+    load_kalshi_bins,
+    select_central_threshold,
+)
 
 
 def _load_json(path: Path) -> dict | None:
@@ -100,14 +90,26 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         if max_date is not None and not pd.isna(max_date):
             dataset_as_of = pd.Timestamp(max_date).normalize().date().isoformat()
 
+    bins_path = Path("data_raw/kalshi_bins.yml")
+    thresholds, probabilities = load_kalshi_bins(bins_path)
+    event_threshold, central_probability = select_central_threshold(
+        thresholds, probabilities
+    )
+
     ensemble_weights = cfg.model.ensemble_weights
     ensemble_bt = EnsembleModel(weights=ensemble_weights)
-    backtest = run_backtest(dataset, ensemble_bt)
-    calibrated_prior_weight = (
-        backtest.calibrated_prior_weight
-        if backtest.calibrated_prior_weight is not None
-        else cfg.model.prior_weight
-    )
+    backtest = run_backtest(dataset, ensemble_bt, threshold=event_threshold)
+
+    prior_weight_source = "config"
+    prior_weight_meta = _load_json(Path("data_proc") / "prior_weight.json")
+    if isinstance(prior_weight_meta, dict) and "best_weight" in prior_weight_meta:
+        prior_weight = float(prior_weight_meta["best_weight"])
+        prior_weight_source = "file"
+    elif backtest.calibrated_prior_weight is not None:
+        prior_weight = float(backtest.calibrated_prior_weight)
+        prior_weight_source = "calibrated"
+    else:
+        prior_weight = float(cfg.model.prior_weight)
 
     risk = evaluate_risk(dataset, cfg)
 
@@ -192,13 +194,10 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     except ValueError:
         asymmetry_ci = None
 
-    bins_path = Path("data_raw/kalshi_bins.yml")
-    thresholds, probabilities = _load_prior_bins(bins_path)
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     prior_fn = _prior_cdf_factory(prior_model)
 
     base_samples = nowcast_sim.samples
-    prior_weight = float(calibrated_prior_weight)
 
     def posterior_factory(
         rbob_delta: float, alpha_delta: float
@@ -244,10 +243,10 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
 
     posterior_summary = base_posterior.summary()
     posterior_summary["prior_weight"] = prior_weight
-    if backtest.calibrated_prior_weight is not None:
-        posterior_summary["prior_weight_source"] = "calibrated"
-    else:
-        posterior_summary["prior_weight_source"] = "config"
+    posterior_summary["prior_weight_source"] = prior_weight_source
+    posterior_summary["event_threshold"] = event_threshold
+    if central_probability is not None:
+        posterior_summary["central_kalshi_probability"] = central_probability
     for threshold in thresholds:
         posterior_summary[f"prob_ge_{threshold:.2f}"] = base_posterior.prob_above(
             float(threshold)
