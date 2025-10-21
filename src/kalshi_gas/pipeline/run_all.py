@@ -351,7 +351,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
 
     sensitivity_fig = figures_dir / "sensitivity_bars.png"
     plot_sensitivity_bars(
-        sensitivity_bars,
+        sensitivity,
         sensitivity_fig,
         as_of=dataset_as_of,
         source=model_source,

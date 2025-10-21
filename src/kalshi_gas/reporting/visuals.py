@@ -129,37 +129,102 @@ def plot_risk_box(
 
 
 def plot_sensitivity_bars(
-    sensitivity_bars: pd.DataFrame,
+    sensitivity: pd.DataFrame,
     output_path: Path,
     *,
     as_of: str | None = None,
     source: str | None = None,
 ) -> Path:
-    frame = sensitivity_bars.copy()
+    if sensitivity.empty:
+        frame = pd.DataFrame(columns=["threshold", "scenario", "delta"])
+    else:
+        base = sensitivity[
+            (sensitivity["rbob_delta"].abs() < 1e-9)
+            & (sensitivity["alpha_delta"].abs() < 1e-9)
+        ].set_index("threshold")["prob_above"]
+        thresholds = sorted(base.index.unique())
+        scenarios = [
+            ("RBOB -5¢", -0.05, 0.0),
+            ("RBOB +5¢", 0.05, 0.0),
+            ("Alpha -5¢", 0.0, -0.05),
+            ("Alpha +5¢", 0.0, 0.05),
+        ]
+        records: list[dict[str, float | str]] = []
+        for threshold in thresholds:
+            base_prob = float(base.get(threshold, np.nan))
+            for label, rbob_delta, alpha_delta in scenarios:
+                mask = (
+                    np.isclose(sensitivity["threshold"], threshold)
+                    & np.isclose(sensitivity["rbob_delta"], rbob_delta)
+                    & np.isclose(sensitivity["alpha_delta"], alpha_delta)
+                )
+                if not mask.any():
+                    continue
+                prob = float(sensitivity.loc[mask, "prob_above"].iloc[0])
+                records.append(
+                    {
+                        "threshold": threshold,
+                        "scenario": label,
+                        "delta": prob - base_prob,
+                    }
+                )
+        frame = pd.DataFrame(records)
+
     if frame.empty:
         frame = pd.DataFrame(
-            {"threshold": [], "prob_min": [], "prob_max": [], "prob_base": []}
+            {
+                "threshold": [],
+                "scenario": [],
+                "delta": [],
+            }
         )
-    frame = frame.sort_values("threshold").reset_index(drop=True)
-    y_positions = np.arange(len(frame))
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    for idx, row in frame.iterrows():
-        y = y_positions[idx]
-        prob_min = row.get("prob_min")
-        prob_max = row.get("prob_max")
-        prob_base = row.get("prob_base")
-        if pd.notna(prob_min) and pd.notna(prob_max):
-            ax.hlines(y, prob_min, prob_max, color="#1f77b4", linewidth=3, alpha=0.7)
-        if pd.notna(prob_base):
-            ax.scatter(prob_base, y, color="#d62728", zorder=3)
+    scenarios_order = ["RBOB -5¢", "RBOB +5¢", "Alpha -5¢", "Alpha +5¢"]
+    colors = {
+        "RBOB -5¢": "#1f77b4",
+        "RBOB +5¢": "#1f77b4",
+        "Alpha -5¢": "#ff7f0e",
+        "Alpha +5¢": "#ff7f0e",
+    }
 
-    ax.set_yticks(y_positions)
-    ax.set_yticklabels([f"≥ {row:.2f}" for row in frame["threshold"]])
-    ax.set_xlabel("Probability")
-    ax.set_title("Posterior Sensitivity Range")
-    ax.set_xlim(0, 1)
-    ax.grid(axis="x", alpha=0.2)
+    unique_thresholds = sorted(frame["threshold"].unique())
+    fig, ax = plt.subplots(figsize=(6.5, 4))
+
+    if not unique_thresholds:
+        ax.text(0.5, 0.5, "No sensitivity data", ha="center", va="center")
+        ax.axis("off")
+    else:
+        y_positions: list[float] = []
+        y_labels: list[str] = []
+        spacing = len(scenarios_order) + 1
+        for idx, threshold in enumerate(unique_thresholds):
+            block = frame[frame["threshold"] == threshold]
+            base_y = idx * spacing
+            for offset, scenario in enumerate(scenarios_order):
+                row = block[block["scenario"] == scenario]
+                if row.empty:
+                    continue
+                y = base_y + offset
+                delta = float(row["delta"].iloc[0])
+                ax.barh(
+                    y,
+                    delta,
+                    color=colors.get(scenario, "#333333"),
+                    alpha=0.85,
+                    height=0.8,
+                )
+                y_positions.append(y)
+                y_labels.append(f"≥ {threshold:.2f} – {scenario}")
+
+        ax.axvline(0, color="#444444", linewidth=1, alpha=0.6)
+        if y_positions:
+            ax.set_yticks(y_positions)
+            ax.set_yticklabels(y_labels, fontsize=8)
+            ax.set_ylim(min(y_positions) - 1, max(y_positions) + 1)
+        ax.grid(axis="x", alpha=0.2)
+
+    ax.set_xlabel("Δ Probability")
+    ax.set_title("Sensitivity: ΔP(Yes) for ±$0.05 RBOB / ±5¢ α")
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     _draw_footer(fig, as_of, source)
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -55,7 +55,10 @@ Generated on {{ metadata.generated_at }}
 
 ![Calibration Curve]({{ figures.calibration }})
 
-## Posterior Snapshot
+## Model Outputs
+![Sensitivity Bars]({{ figures.sensitivity }})
+
+### Posterior Snapshot
 - Mean: {{ "%.4f"|format(posterior.mean) }}
 - Variance: {{ "%.4f"|format(posterior.variance) }}
 - 90% CI: [{{ "%.4f"|format(posterior.ci_5) }}, {{ "%.4f"|format(posterior.ci_95) }}] ({{ "%.4f"|format(posterior.ci_lower_span) }} down / {{ "%.4f"|format(posterior.ci_upper_span) }} up)
@@ -67,16 +70,6 @@ Generated on {{ metadata.generated_at }}
 {% for key, value in posterior.items() if key.startswith("prob_ge_") -%}
 - {{ key }}: {{ "%.4f"|format(value) }}
 {% endfor %}
-
-### Sensitivity Bars
-| Threshold | Base Prob | Min | Max |
-| --- | --- | --- | --- |
-{% for row in sensitivity_bars -%}
-{% set prob_base = row.get('prob_base') %}{% set prob_min = row.get('prob_min') %}{% set prob_max = row.get('prob_max') %}
-| {{ "%.2f"|format(row.get('threshold')) }} | {{ "%.4f"|format(prob_base) if prob_base is not none else "" }} | {{ "%.4f"|format(prob_min) if prob_min is not none else "" }} | {{ "%.4f"|format(prob_max) if prob_max is not none else "" }} |
-{% endfor %}
-
-![Sensitivity Bars]({{ figures.sensitivity }})
 
 ### Sensitivity Grid (Detail)
 | Threshold | ΔRBOB | ΔAlpha | Prob ≥ Threshold |
