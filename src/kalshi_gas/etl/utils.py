@@ -76,6 +76,34 @@ def utcnow_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+@dataclass(frozen=True)
+class SourceSelection:
+    """Describe chosen data source for ETL."""
+
+    mode: str
+    path: Path | None
+
+
+def get_source(
+    name: str,
+    *,
+    sample_path: Path,
+    suffix: str | None = None,
+    allow_live: bool = True,
+) -> SourceSelection:
+    """Return source selection respecting env-controlled live fallbacks."""
+    suffix = suffix or sample_path.suffix or ".csv"
+    last_good_path = Path("data_raw") / f"last_good.{name}{suffix}"
+
+    if allow_live and use_live_data():
+        return SourceSelection(mode="live", path=None)
+
+    if last_good_path.exists():
+        return SourceSelection(mode="last_good", path=last_good_path)
+
+    return SourceSelection(mode="sample", path=sample_path)
+
+
 def snapshot_meta_path(snapshot_path: Path) -> Path:
     return snapshot_path.parent / f"{snapshot_path.name}.meta.json"
 

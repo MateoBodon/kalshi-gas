@@ -41,6 +41,10 @@ Set `KALSHI_GAS_USE_LIVE=1` to enable live HTTP pulls. Additional credentials:
 
 Without these, the pipeline defaults to deterministic sample data.
 
+## Fallback & Freshness
+
+Each ETL component follows a deterministic fallback chain: live API → `data_raw/last_good.*` snapshot → bundled samples in `data/sample/`. Provenance sidecars under `data_proc/meta/` capture the current mode and as‑of timestamps. Run `make check-fresh` to assert that the latest last-good snapshots meet freshness guardrails; sample mode automatically skips the check for offline runs.
+
 ## Project Layout
 
 - `src/kalshi_gas/etl`: Extract/transform/load tasks

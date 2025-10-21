@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install lint test report models figures clean
+.PHONY: install lint test report models figures clean check-fresh
 
 install:
 	$(PYTHON) -m pip install -e .[dev]
@@ -14,6 +14,9 @@ test:
 
 report:
 	$(PYTHON) -m kalshi_gas.cli report
+
+check-fresh:
+	$(PYTHON) scripts/check_freshness.py
 
 models:
 	$(PYTHON) -m pytest tests/test_prior_isotonic.py tests/test_structural_map.py tests/test_nowcast_sim.py tests/test_posterior_prob.py
