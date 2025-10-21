@@ -14,6 +14,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            pyproject.toml
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
@@ -24,3 +27,25 @@ jobs:
         run: make test
       - name: Build report artifact
         run: make report
+      - name: Freshness gate
+        if: ${{ github.event_name == 'schedule' || (github.event_name != 'schedule' && startsWith(github.ref, 'refs/heads/')) }}
+        env:
+          RUN_DATE: ${{ github.run_started_at }}
+        run: |
+          import os
+          from datetime import datetime, timezone
+
+          run_ts = datetime.fromisoformat("${{ github.run_started_at }}".replace("Z", "+00:00"))
+          if run_ts.month == 10 and run_ts.day in (29, 30):
+              import subprocess
+              subprocess.run(["make", "check-fresh"], check=True)
+          else:
+              print("Freshness gate skipped (outside Oct 29-30 window).")
+        shell: python
+      - name: Upload memo and figures
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-assets
+          path: |
+            build/memo/report.md
+            build/figures
