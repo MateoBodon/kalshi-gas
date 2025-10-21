@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install lint test report models figures clean check-fresh
+.PHONY: install lint test report deck models figures clean check-fresh
 
 install:
 	$(PYTHON) -m pip install -e .[dev]
@@ -12,8 +12,11 @@ lint:
 test:
 	$(PYTHON) -m pytest
 
-report:
+report: deck
 	$(PYTHON) -m kalshi_gas.cli report
+
+deck:
+	$(PYTHON) -m kalshi_gas.reporting.deck
 
 check-fresh:
 	$(PYTHON) scripts/check_freshness.py
