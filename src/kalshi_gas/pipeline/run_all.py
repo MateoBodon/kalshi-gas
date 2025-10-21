@@ -16,6 +16,7 @@ from kalshi_gas.data.assemble import assemble_dataset
 from kalshi_gas.data.provenance import write_meta
 from kalshi_gas.etl.pipeline import run_all_etl
 from kalshi_gas.models.ensemble import EnsembleModel
+from kalshi_gas.models.pass_through import PassThroughModel
 from kalshi_gas.models.posterior import PosteriorDistribution, compute_sensitivity
 from kalshi_gas.models.prior import MarketPriorCDF
 from kalshi_gas.models.structural import fit_structural_pass_through
@@ -160,6 +161,11 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     nowcast_sim = live_ensemble.nowcast.simulate()
 
     structural = fit_structural_pass_through(dataset, asymmetry=True)
+    asymmetry_ci = None
+    try:
+        asymmetry_ci = PassThroughModel.bootstrap_asymmetry_ci(dataset, structural)
+    except ValueError:
+        asymmetry_ci = None
 
     bins_path = Path("data_raw/kalshi_bins.yml")
     thresholds, probabilities = _load_prior_bins(bins_path)
@@ -346,6 +352,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         provenance=provenance_records,
         benchmarks=benchmarks,
         sensitivity_bars=sensitivity_bars,
+        asymmetry_ci=asymmetry_ci,
         meta_files=[str(path) for path in meta_paths],
         output_path=report_path,
     )
@@ -368,6 +375,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         sensitivity_bars=sensitivity_bars.to_dict(orient="records"),
         headline_threshold=headline_threshold,
         headline_probability=headline_probability,
+        asymmetry_ci=asymmetry_ci,
         output_path=deck_path,
     )
 
@@ -421,4 +429,5 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "deck_path": deck_path,
         "artifacts_path": artifacts_path,
         "meta_files": [str(path) for path in meta_paths],
+        "asymmetry_ci": asymmetry_ci,
     }

@@ -10,6 +10,8 @@ Generated on {{ metadata.generated_at }}
 - Posterior mean: {{ "%.2f"|format(posterior.mean) }} USD/gal
 - 90% interval: {{ "%.2f"|format(posterior.ci_5) }} — {{ "%.2f"|format(posterior.ci_95) }}
 - Prior weight: {{ "%.2f"|format(posterior.prior_weight) }} ({{ posterior.prior_weight_source }})
+{% if asymmetry_ci %}- Asymmetry Δβ: {{ "%.3f"|format(asymmetry_ci[0]) }} (95% CI [{{ "%.3f"|format(asymmetry_ci[1]) }}, {{ "%.3f"|format(asymmetry_ci[2]) }}])
+{% endif %}
 
 ![Forecast vs Actual]({{ figures.forecast }})
 

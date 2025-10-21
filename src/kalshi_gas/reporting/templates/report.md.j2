@@ -57,6 +57,9 @@ Generated on {{ metadata.generated_at }}
 - 90% CI: [{{ "%.4f"|format(posterior.ci_5) }}, {{ "%.4f"|format(posterior.ci_95) }}] ({{ "%.4f"|format(posterior.ci_lower_span) }} down / {{ "%.4f"|format(posterior.ci_upper_span) }} up)
 - 80% CI: [{{ "%.4f"|format(posterior.ci_10) }}, {{ "%.4f"|format(posterior.ci_90) }}]
 - Prior weight: {{ "%.2f"|format(posterior.prior_weight) }} ({{ posterior.prior_weight_source }})
+{% if asymmetry_ci %}
+- Asymmetry: Δβ = {{ "%.4f"|format(asymmetry_ci[0]) }} (95% CI [{{ "%.4f"|format(asymmetry_ci[1]) }}, {{ "%.4f"|format(asymmetry_ci[2]) }}])
+{% endif %}
 {% for key, value in posterior.items() if key.startswith("prob_ge_") -%}
 - {{ key }}: {{ "%.4f"|format(value) }}
 {% endfor %}

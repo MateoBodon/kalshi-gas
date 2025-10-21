@@ -35,6 +35,7 @@ class ReportBuilder:
         provenance: list[dict[str, object]] | None,
         benchmarks: list[dict[str, object]] | None,
         sensitivity_bars: pd.DataFrame | None,
+        asymmetry_ci: tuple[float, float, float] | None,
         meta_files: list[str] | None,
         output_path: Path,
     ) -> Path:
@@ -60,6 +61,7 @@ class ReportBuilder:
             provenance=provenance_records,
             benchmarks=benchmark_rows,
             sensitivity_bars=sensitivity_bar_rows,
+            asymmetry_ci=asymmetry_ci,
             meta_files=meta_files or [],
             figures=figures,
             metadata={"generated_at": datetime.utcnow().isoformat()},
@@ -78,6 +80,7 @@ class ReportBuilder:
         sensitivity_bars: list[dict[str, object]] | None,
         headline_threshold: float | None,
         headline_probability: float | None,
+        asymmetry_ci: tuple[float, float, float] | None,
         output_path: Path,
     ) -> Path:
         template = self.env.get_template("deck.md.j2")
@@ -92,6 +95,7 @@ class ReportBuilder:
             sensitivity_bars=sensitivity_bars or [],
             headline_threshold=headline_threshold,
             headline_probability=headline_probability,
+            asymmetry_ci=asymmetry_ci,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
