@@ -65,10 +65,35 @@ class PosteriorDistribution:
     def variance(self) -> float:
         return float(np.var(self.samples))
 
+    def quantile(self, level: float) -> float:
+        if not 0.0 <= level <= 1.0:
+            raise ValueError("quantile level must be within [0, 1]")
+        return float(np.quantile(self.sorted_samples, level))
+
+    def credible_interval(self, alpha: float = 0.1) -> tuple[float, float]:
+        """Return central credible interval with tail probability alpha."""
+        alpha = float(alpha)
+        if not 0 < alpha < 1:
+            raise ValueError("alpha must lie within (0, 1)")
+        lower = self.quantile(alpha / 2)
+        upper = self.quantile(1 - alpha / 2)
+        return lower, upper
+
     def summary(self) -> dict[str, float]:
+        mean_value = self.mean
+        lower_05, upper_05 = self.credible_interval(alpha=0.10)
+        lower_20, upper_20 = self.credible_interval(alpha=0.20)
+        lower_offset = mean_value - lower_05
+        upper_offset = upper_05 - mean_value
         return {
-            "mean": self.mean,
+            "mean": mean_value,
             "variance": self.variance,
+            "ci_5": lower_05,
+            "ci_95": upper_05,
+            "ci_10": lower_20,
+            "ci_90": upper_20,
+            "ci_lower_span": lower_offset,
+            "ci_upper_span": upper_offset,
         }
 
 

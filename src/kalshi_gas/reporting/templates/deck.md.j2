@@ -1,0 +1,61 @@
+# Kalshi Gas Deck
+
+Generated on {{ metadata.generated_at }}
+
+## Headline Probability
+{% if headline_threshold is not none %}
+- Event: Retail ≥ {{ "%.2f"|format(headline_threshold) }} USD/gal (next week)
+- Posterior probability: {{ "%.1f"|format((headline_probability or 0) * 100) }}%
+{% endif %}
+- Posterior mean: {{ "%.2f"|format(posterior.mean) }} USD/gal
+- 90% interval: {{ "%.2f"|format(posterior.ci_5) }} — {{ "%.2f"|format(posterior.ci_95) }}
+- Prior weight: {{ "%.2f"|format(posterior.prior_weight) }} ({{ posterior.prior_weight_source }})
+
+![Forecast vs Actual]({{ figures.forecast }})
+
+---
+
+## Risk Posture
+- Tightness flag: **{{ "ON" if risk_flags["tightness"]["active"] else "OFF" }}** (draw {{ "%.2f"|format(risk_flags["tightness"]["gasoline_stocks_draw"]) }} mmbbl)
+- Refinery utilisation: {{ "%.1f"|format(risk_flags["tightness"]["refinery_util_pct"]) }}%
+- NHC alert: **{{ "ON" if risk_flags["nhc"]["nhc_alert"] else "OFF" }}**, analyst override: **{{ "ON" if risk_flags["nhc"]["analyst_flag"] else "OFF" }}**
+{% if risk_flags["adjustments"] %}
+- Tail adjustments: {% for note in risk_flags["adjustments"] -%}{{ note }}{% if not loop.last %}; {% endif %}{% endfor %}
+{% else %}
+- Tail adjustments: none
+{% endif %}
+
+![Risk Box]({{ figures.risk_box }})
+
+---
+
+## Performance Snapshot
+| Model | Brier | Brier SE | RMSE |
+| --- | --- | --- | --- |
+{% for row in benchmarks -%}
+{% set brier = row.get('brier') %}{% set brier_se = row.get('brier_se') %}{% set rmse = row.get('rmse') %}
+| {{ row.get('model') }} | {{ "%.3f"|format(brier) if brier is not none else "" }} | {{ "%.3f"|format(brier_se) if brier_se is not none else "" }} | {{ "%.3f"|format(rmse) if rmse is not none else "" }} |
+{% endfor %}
+
+![Calibration Curve]({{ figures.calibration }})
+
+---
+
+## Sensitivity Highlights
+| Threshold | Base | Min | Max |
+| --- | --- | --- | --- |
+{% for row in sensitivity_bars -%}
+{% set prob_base = row.get('prob_base') %}{% set prob_min = row.get('prob_min') %}{% set prob_max = row.get('prob_max') %}
+| {{ "%.2f"|format(row.get('threshold')) }} | {{ "%.2f"|format(prob_base * 100) if prob_base is not none else "" }}% | {{ "%.2f"|format(prob_min * 100) if prob_min is not none else "" }}% | {{ "%.2f"|format(prob_max * 100) if prob_max is not none else "" }}% |
+{% endfor %}
+
+![Sensitivity Bars]({{ figures.sensitivity }})
+
+---
+
+## Data Footnotes
+| Source | Mode | As Of | Fresh |
+| --- | --- | --- | --- |
+{% for record in provenance -%}
+| {{ record.source }} | {{ record.mode }} | {{ record.as_of|default("n/a", true) }} | {{ "yes" if record.fresh else "no" }} |
+{% endfor %}

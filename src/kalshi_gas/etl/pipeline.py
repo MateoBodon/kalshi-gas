@@ -6,12 +6,13 @@ from typing import Dict
 
 from kalshi_gas.config import PipelineConfig, load_config
 from kalshi_gas.etl.aaa import build_aaa_etl
+from kalshi_gas.etl.base import ETLRunResult
 from kalshi_gas.etl.eia import build_eia_etl
 from kalshi_gas.etl.kalshi import build_kalshi_etl
 from kalshi_gas.etl.rbob import build_rbob_etl
 
 
-def run_all_etl(config: PipelineConfig | None = None) -> Dict[str, str]:
+def run_all_etl(config: PipelineConfig | None = None) -> Dict[str, ETLRunResult]:
     """Execute ETL for all configured sources."""
     cfg = config or load_config()
     tasks = {
@@ -20,8 +21,8 @@ def run_all_etl(config: PipelineConfig | None = None) -> Dict[str, str]:
         "rbob": build_rbob_etl(cfg),
         "kalshi": build_kalshi_etl(cfg),
     }
-    outputs: Dict[str, str] = {}
+    outputs: Dict[str, ETLRunResult] = {}
     for name, task in tasks.items():
-        output_path = task.run()
-        outputs[name] = str(output_path)
+        result = task.run()
+        outputs[name] = result
     return outputs

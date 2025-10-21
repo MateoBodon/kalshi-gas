@@ -2,22 +2,30 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
+import pandas as pd
 import yaml
 
 from kalshi_gas.backtest.evaluate import run_backtest
 from kalshi_gas.config import PipelineConfig, load_config
 from kalshi_gas.data.assemble import assemble_dataset
+from kalshi_gas.data.provenance import write_meta
 from kalshi_gas.etl.pipeline import run_all_etl
 from kalshi_gas.models.ensemble import EnsembleModel
 from kalshi_gas.models.posterior import PosteriorDistribution, compute_sensitivity
 from kalshi_gas.models.prior import MarketPriorCDF
 from kalshi_gas.models.structural import fit_structural_pass_through
 from kalshi_gas.reporting.report_builder import ReportBuilder
-from kalshi_gas.reporting.visuals import plot_calibration, plot_price_forecast
+from kalshi_gas.reporting.visuals import (
+    plot_calibration,
+    plot_price_forecast,
+    plot_risk_box,
+    plot_sensitivity_bars,
+)
 from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 from kalshi_gas.risk.gates import evaluate_risk
 
@@ -65,12 +73,33 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     cfg: PipelineConfig = load_config(config_path)
     cfg.data.build_dir.mkdir(parents=True, exist_ok=True)
 
-    etl_outputs = run_all_etl(cfg)
+    etl_results = run_all_etl(cfg)
+    etl_outputs = {
+        name: str(result.output_path) for name, result in etl_results.items()
+    }
+    etl_provenance = {
+        name: result.provenance.serialize() if result.provenance else None
+        for name, result in etl_results.items()
+    }
+    metadata_dir = cfg.data.build_dir / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    provenance_path = metadata_dir / "data_provenance.json"
+    provenance_path.write_text(json.dumps(etl_provenance, indent=2), encoding="utf-8")
     dataset = assemble_dataset(cfg)
+    dataset_as_of = None
+    if not dataset.empty:
+        max_date = dataset["date"].max()
+        if max_date is not None and not pd.isna(max_date):
+            dataset_as_of = pd.Timestamp(max_date).normalize().date().isoformat()
 
     ensemble_weights = cfg.model.ensemble_weights
     ensemble_bt = EnsembleModel(weights=ensemble_weights)
     backtest = run_backtest(dataset, ensemble_bt)
+    calibrated_prior_weight = (
+        backtest.calibrated_prior_weight
+        if backtest.calibrated_prior_weight is not None
+        else cfg.model.prior_weight
+    )
 
     risk = evaluate_risk(dataset, cfg)
 
@@ -138,7 +167,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     prior_fn = _prior_cdf_factory(prior_model)
 
     base_samples = nowcast_sim.samples
-    prior_weight = cfg.model.prior_weight
+    prior_weight = float(calibrated_prior_weight)
 
     def posterior_factory(
         rbob_delta: float, alpha_delta: float
@@ -165,51 +194,215 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     data_proc_dir.mkdir(parents=True, exist_ok=True)
     sensitivity_path = data_proc_dir / "sensitivity.csv"
     sensitivity.to_csv(sensitivity_path, index=False)
+    base_rows = sensitivity[
+        (sensitivity["rbob_delta"].abs() < 1e-9)
+        & (sensitivity["alpha_delta"].abs() < 1e-9)
+    ]
+    base_lookup = {
+        float(row.threshold): float(row.prob_above) for row in base_rows.itertuples()
+    }
+    sensitivity_bars = (
+        sensitivity.groupby("threshold", observed=True)["prob_above"]
+        .agg(["min", "max"])
+        .rename(columns={"min": "prob_min", "max": "prob_max"})
+        .reset_index()
+    )
+    sensitivity_bars["prob_base"] = sensitivity_bars["threshold"].map(base_lookup)
+    sensitivity_bars_path = data_proc_dir / "sensitivity_bars.csv"
+    sensitivity_bars.to_csv(sensitivity_bars_path, index=False)
 
     posterior_summary = base_posterior.summary()
+    posterior_summary["prior_weight"] = prior_weight
+    if backtest.calibrated_prior_weight is not None:
+        posterior_summary["prior_weight_source"] = "calibrated"
+    else:
+        posterior_summary["prior_weight_source"] = "config"
     for threshold in thresholds:
         posterior_summary[f"prob_ge_{threshold:.2f}"] = base_posterior.prob_above(
             float(threshold)
         )
+
+    metrics = backtest.metrics
+    benchmarks: list[dict[str, float | str | None]] = [
+        {
+            "model": "Ensemble",
+            "brier": metrics.get("brier_score"),
+            "brier_se": metrics.get("brier_score_se"),
+            "rmse": metrics.get("rmse"),
+        },
+        {
+            "model": "Posterior",
+            "brier": metrics.get("posterior_brier"),
+            "brier_se": metrics.get("posterior_brier_se"),
+        },
+        {
+            "model": "Carry Forward",
+            "brier": metrics.get("brier_carry"),
+            "rmse": metrics.get("carry_rmse"),
+        },
+        {
+            "model": "Kalshi Prior",
+            "brier": metrics.get("brier_prior"),
+        },
+    ]
+    benchmarks = [
+        row
+        for row in benchmarks
+        if any(value is not None for key, value in row.items() if key != "model")
+    ]
+
+    provenance_records: list[dict[str, object]] = []
+    for source, prov in etl_provenance.items():
+        if isinstance(prov, dict):
+            record = {"source": source, **prov}
+            provenance_records.append(record)
+    provenance_records.sort(key=lambda entry: str(entry.get("source") or ""))
+    source_names = sorted(
+        {
+            str(entry.get("source"))
+            for entry in provenance_records
+            if entry.get("source") is not None
+        }
+    )
+    source_summary = ", ".join(source_names)
+
+    meta_dir = Path("data_proc") / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    meta_paths: list[Path] = []
+    for record in provenance_records:
+        source_name = str(record.get("source") or "source")
+        meta_path = write_meta(meta_dir / f"{source_name}.json", record)
+        meta_paths.append(meta_path)
+    dataset_meta_path = meta_dir / "dataset.json"
+    if dataset_meta_path.exists():
+        meta_paths.append(dataset_meta_path)
 
     figures_dir = cfg.data.build_dir / "figures"
     memo_dir = cfg.data.build_dir / "memo"
     figures_dir.mkdir(parents=True, exist_ok=True)
     memo_dir.mkdir(parents=True, exist_ok=True)
 
+    model_source = "Kalshi Gas ensemble model"
+    data_source = source_summary or "Kalshi Gas data sources"
+
     forecast_fig = figures_dir / "forecast_vs_actual.png"
     calibration_fig = figures_dir / "calibration.png"
-    plot_price_forecast(backtest.test_frame, forecast_fig)
-    plot_calibration(backtest.calibration, calibration_fig)
+    plot_price_forecast(
+        backtest.test_frame,
+        forecast_fig,
+        as_of=dataset_as_of,
+        source=model_source,
+    )
+    plot_calibration(
+        backtest.calibration,
+        calibration_fig,
+        as_of=dataset_as_of,
+        source=model_source,
+    )
 
     fundamentals_fig = figures_dir / "fundamentals_dashboard.png"
     plot_fundamentals_dashboard(dataset, risk_flags, fundamentals_fig)
+
+    risk_box_fig = figures_dir / "risk_box.png"
+    plot_risk_box(
+        risk_flags,
+        metrics,
+        risk_box_fig,
+        as_of=dataset_as_of,
+        source=data_source,
+    )
+
+    sensitivity_fig = figures_dir / "sensitivity_bars.png"
+    plot_sensitivity_bars(
+        sensitivity_bars,
+        sensitivity_fig,
+        as_of=dataset_as_of,
+        source=model_source,
+    )
 
     results_csv = memo_dir / "forecast_results.csv"
     backtest.test_frame.to_csv(results_csv, index=False)
 
     builder = ReportBuilder()
     report_path = memo_dir / "report.md"
+    figures_relative = {
+        key: Path("..") / "figures" / value.name
+        for key, value in {
+            "forecast": forecast_fig,
+            "calibration": calibration_fig,
+            "fundamentals": fundamentals_fig,
+            "risk_box": risk_box_fig,
+            "sensitivity": sensitivity_fig,
+        }.items()
+    }
     builder.build(
         metrics=backtest.metrics,
         risk=risk,
         calibration=backtest.calibration,
-        figures={
-            "forecast": Path("..") / "figures" / forecast_fig.name,
-            "calibration": Path("..") / "figures" / calibration_fig.name,
-            "fundamentals": Path("..") / "figures" / fundamentals_fig.name,
-        },
+        figures=figures_relative,
         posterior=posterior_summary,
         sensitivity=sensitivity,
         risk_flags=risk_flags,
+        provenance=provenance_records,
+        benchmarks=benchmarks,
+        sensitivity_bars=sensitivity_bars,
+        meta_files=[str(path) for path in meta_paths],
         output_path=report_path,
+    )
+
+    headline_threshold = float(thresholds[0]) if len(thresholds) > 0 else None
+    headline_probability = (
+        posterior_summary.get(f"prob_ge_{headline_threshold:.2f}")
+        if headline_threshold is not None
+        else None
+    )
+    deck_dir = cfg.data.build_dir / "deck"
+    deck_dir.mkdir(parents=True, exist_ok=True)
+    deck_path = deck_dir / "deck.md"
+    builder.build_deck(
+        posterior=posterior_summary,
+        risk_flags=risk_flags,
+        benchmarks=benchmarks,
+        figures=figures_relative,
+        provenance=provenance_records,
+        sensitivity_bars=sensitivity_bars.to_dict(orient="records"),
+        headline_threshold=headline_threshold,
+        headline_probability=headline_probability,
+        output_path=deck_path,
+    )
+
+    artifacts_manifest = {
+        "report": str(report_path),
+        "deck": str(deck_path),
+        "figures": {
+            key: str(path)
+            for key, path in {
+                "forecast": forecast_fig,
+                "calibration": calibration_fig,
+                "fundamentals": fundamentals_fig,
+                "risk_box": risk_box_fig,
+                "sensitivity": sensitivity_fig,
+            }.items()
+        },
+        "data": {
+            "results_csv": str(results_csv),
+            "sensitivity_grid": str(sensitivity_path),
+            "sensitivity_bars": str(sensitivity_bars_path),
+            "provenance": str(provenance_path),
+        },
+    }
+    artifacts_path = metadata_dir / "artifacts.json"
+    artifacts_path.write_text(
+        json.dumps(artifacts_manifest, indent=2), encoding="utf-8"
     )
 
     return {
         "etl_outputs": etl_outputs,
+        "etl_provenance": etl_provenance,
         "report_path": report_path,
         "results_csv": results_csv,
         "sensitivity_path": sensitivity_path,
+        "sensitivity_bars_path": sensitivity_bars_path,
         "posterior_summary": posterior_summary,
         "structural": structural,
         "risk_flags": risk_flags,
@@ -217,5 +410,15 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             "forecast": forecast_fig,
             "calibration": calibration_fig,
             "fundamentals": fundamentals_fig,
+            "risk_box": risk_box_fig,
+            "sensitivity": sensitivity_fig,
         },
+        "provenance_path": provenance_path,
+        "prior_weight": prior_weight,
+        "sensitivity_bars": sensitivity_bars,
+        "benchmarks": benchmarks,
+        "provenance_records": provenance_records,
+        "deck_path": deck_path,
+        "artifacts_path": artifacts_path,
+        "meta_files": [str(path) for path in meta_paths],
     }

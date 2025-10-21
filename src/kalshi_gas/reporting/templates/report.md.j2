@@ -2,51 +2,83 @@
 
 Generated on {{ metadata.generated_at }}
 
-## Ensemble Metrics
+## Data Sources & Provenance
+| Source | Mode | As Of | Fresh | Records | Path |
+| --- | --- | --- | --- | --- | --- |
+{% for record in provenance -%}
+| {{ record.source }} | {{ record.mode }} | {{ record.as_of|default("n/a", true) }} | {{ "yes" if record.fresh else "no" }} | {{ record.records|default("", true) }} | {{ record.path|default("", true) }} |
+{% endfor %}
+
+## Risk Dashboard
+- NHC alert: **{{ "ON" if risk.nhc_alert else "OFF" }}** ({{ risk.details["nhc"]["active_storms"] }} active storms vs threshold {{ risk.details["nhc"]["threshold"] }})
+- WPSR alert: **{{ "ON" if risk.wpsr_alert else "OFF" }}** (latest change {{ "%.2f"|format(risk.details["wpsr"]["latest_change"]) }} vs {{ "%.2f"|format(risk.details["wpsr"]["threshold"]) }})
+- Tightness flag: **{{ "ON" if risk_flags["tightness"]["active"] else "OFF" }}**, draw {{ "%.2f"|format(risk_flags["tightness"]["gasoline_stocks_draw"]) }} mmbbl, refinery util {{ "%.1f"|format(risk_flags["tightness"]["refinery_util_pct"]) }}%
+- NHC overrides: operational {{ "ON" if risk_flags["nhc"]["nhc_alert"] else "OFF" }}, analyst {{ "ON" if risk_flags["nhc"]["analyst_flag"] else "OFF" }}
+{% if risk_flags["adjustments"] %}
+- Tail adjustments: {% for note in risk_flags["adjustments"] -%}{{ note }}{% if not loop.last %}; {% endif %}{% endfor %}
+{% else %}
+- Tail adjustments: none
+{% endif %}
+
+![Risk Box]({{ figures.risk_box }})
+
+![Fundamentals Dashboard]({{ figures.fundamentals }})
+
+## Forecast Performance
+### Ensemble Metrics
 | Metric | Value |
 | --- | --- |
 {% for name, value in metrics.items() -%}
 | {{ name }} | {{ "%.4f"|format(value) }} |
 {% endfor %}
 
-## Risk Gating
-- NHC alert: **{{ "ON" if risk.nhc_alert else "OFF" }}** ({{ risk.details["nhc"]["active_storms"] }} active storms, threshold {{ risk.details["nhc"]["threshold"] }})
-- WPSR alert: **{{ "ON" if risk.wpsr_alert else "OFF" }}** (latest change {{ "%.2f"|format(risk.details["wpsr"]["latest_change"]) }} vs threshold {{ risk.details["wpsr"]["threshold"] }})
-
-## Risk Flags
-- Tightness flag: **{{ "ON" if risk_flags["tightness"]["active"] else "OFF" }}** (draw {{ "%.2f"|format(risk_flags["tightness"]["gasoline_stocks_draw"]) }} mmbbl, refinery util {{ "%.1f"|format(risk_flags["tightness"]["refinery_util_pct"]) }}%)
-- NHC flag: **{{ "ON" if risk_flags["nhc"]["active"] else "OFF" }}** (operational alert {{ "ON" if risk_flags["nhc"]["nhc_alert"] else "OFF" }}, analyst override {{ "ON" if risk_flags["nhc"]["analyst_flag"] else "OFF" }})
-{% if risk_flags["adjustments"] %}
-### Tail Adjustments
-{% for note in risk_flags["adjustments"] %}
-- {{ note }}
+### Benchmarks
+| Model | Brier | Brier SE | RMSE |
+| --- | --- | --- | --- |
+{% for row in benchmarks -%}
+{% set brier = row.get('brier') %}{% set brier_se = row.get('brier_se') %}{% set rmse = row.get('rmse') %}
+| {{ row.get('model') }} | {{ "%.4f"|format(brier) if brier is not none else "" }} | {{ "%.4f"|format(brier_se) if brier_se is not none else "" }} | {{ "%.4f"|format(rmse) if rmse is not none else "" }} |
 {% endfor %}
-{% else %}
-No additional tail adjustments applied.
-{% endif %}
 
-## Calibration Table
+### Calibration Table
 | Forecast Bin | Observed Frequency | Count |
 | --- | --- | --- |
 {% for row in calibration -%}
 | {{ "%.2f"|format(row["forecast_mean"]|default(0, true)) }} | {{ "%.2f"|format(row["outcome_rate"]|default(0, true)) }} | {{ row["count"]|default(0, true) }} |
 {% endfor %}
 
-## Posterior Summary
-{% for name, value in posterior.items() %}
-- {{ name }}: {{ "%.4f"|format(value) }}
+![Forecast vs Actual]({{ figures.forecast }})
+
+![Calibration Curve]({{ figures.calibration }})
+
+## Posterior Snapshot
+- Mean: {{ "%.4f"|format(posterior.mean) }}
+- Variance: {{ "%.4f"|format(posterior.variance) }}
+- 90% CI: [{{ "%.4f"|format(posterior.ci_5) }}, {{ "%.4f"|format(posterior.ci_95) }}] ({{ "%.4f"|format(posterior.ci_lower_span) }} down / {{ "%.4f"|format(posterior.ci_upper_span) }} up)
+- 80% CI: [{{ "%.4f"|format(posterior.ci_10) }}, {{ "%.4f"|format(posterior.ci_90) }}]
+- Prior weight: {{ "%.2f"|format(posterior.prior_weight) }} ({{ posterior.prior_weight_source }})
+{% for key, value in posterior.items() if key.startswith("prob_ge_") -%}
+- {{ key }}: {{ "%.4f"|format(value) }}
 {% endfor %}
 
-## Sensitivity Grid
+### Sensitivity Bars
+| Threshold | Base Prob | Min | Max |
+| --- | --- | --- | --- |
+{% for row in sensitivity_bars -%}
+{% set prob_base = row.get('prob_base') %}{% set prob_min = row.get('prob_min') %}{% set prob_max = row.get('prob_max') %}
+| {{ "%.2f"|format(row.get('threshold')) }} | {{ "%.4f"|format(prob_base) if prob_base is not none else "" }} | {{ "%.4f"|format(prob_min) if prob_min is not none else "" }} | {{ "%.4f"|format(prob_max) if prob_max is not none else "" }} |
+{% endfor %}
+
+![Sensitivity Bars]({{ figures.sensitivity }})
+
+### Sensitivity Grid (Detail)
 | Threshold | ΔRBOB | ΔAlpha | Prob ≥ Threshold |
 | --- | --- | --- | --- |
 {% for row in sensitivity -%}
 | {{ "%.2f"|format(row["threshold"]) }} | {{ "%.3f"|format(row["rbob_delta"]) }} | {{ "%.3f"|format(row["alpha_delta"]) }} | {{ "%.4f"|format(row["prob_above"]) }} |
 {% endfor %}
 
-## Figures
-![Forecast vs Actual]({{ figures.forecast }})
-
-![Calibration Curve]({{ figures.calibration }})
-
-![Fundamentals Dashboard]({{ figures.fundamentals }})
+## Appendix: Meta Files
+{% for path in meta_files -%}
+- {{ path }}
+{% endfor %}

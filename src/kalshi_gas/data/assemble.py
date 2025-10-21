@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from kalshi_gas.config import PipelineConfig
+from kalshi_gas.data.provenance import write_meta
 
 
 def load_processed_frame(path: Path, date_col: str = "date") -> pd.DataFrame:
@@ -38,7 +39,9 @@ def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
 
     dataset = (
         aaa.merge(rbob, on="date", how="left")
-        .merge(eia[["date", "inventory_mmbbl", "inventory_change"]], on="date", how="left")
+        .merge(
+            eia[["date", "inventory_mmbbl", "inventory_change"]], on="date", how="left"
+        )
         .merge(kalshi, on="date", how="left")
     )
 
@@ -54,7 +57,30 @@ def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
     dataset["lag_1"] = dataset["regular_gas_price"].shift(1)
     dataset["lag_7"] = dataset["regular_gas_price"].shift(7)
     dataset["lag_14"] = dataset["regular_gas_price"].shift(14)
-    dataset["target_future_price"] = dataset["regular_gas_price"].shift(-config.model.horizon_days)
+    dataset["target_future_price"] = dataset["regular_gas_price"].shift(
+        -config.model.horizon_days
+    )
     dataset.dropna(inplace=True)
+    dataset = dataset.reset_index(drop=True)
 
-    return dataset.reset_index(drop=True)
+    meta_dir = Path("data_proc") / "meta"
+    latest_date = dataset["date"].max() if not dataset.empty else None
+    as_of = None
+    if latest_date is not None and not pd.isna(latest_date):
+        as_of = pd.Timestamp(latest_date).normalize().date().isoformat()
+    meta_payload = {
+        "source": "dataset",
+        "mode": "assembled",
+        "as_of": as_of,
+        "records": int(len(dataset)),
+        "columns": list(dataset.columns),
+        "inputs": [
+            str(aaa_path),
+            str(rbob_path),
+            str(eia_path),
+            str(kalshi_path),
+        ],
+    }
+    write_meta(meta_dir / "dataset.json", meta_payload)
+
+    return dataset
