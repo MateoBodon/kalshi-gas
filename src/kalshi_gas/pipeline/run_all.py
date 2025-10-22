@@ -402,6 +402,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         jackknife=jackknife_summary,
         meta_files=[str(path) for path in meta_paths],
         output_path=report_path,
+        as_of=dataset_as_of,
     )
 
     headline_threshold = float(thresholds[0]) if len(thresholds) > 0 else None

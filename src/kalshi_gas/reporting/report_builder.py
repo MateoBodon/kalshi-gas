@@ -40,6 +40,7 @@ class ReportBuilder:
         jackknife: str | None,
         meta_files: list[str] | None,
         output_path: Path,
+        as_of: str | None = None,
     ) -> Path:
         template = self.env.get_template("report.md.j2")
         figures = {key: str(value) for key, value in figures.items()}
@@ -52,6 +53,10 @@ class ReportBuilder:
             sensitivity_bars.to_dict(orient="records")
             if isinstance(sensitivity_bars, pd.DataFrame)
             else []
+        )
+        as_of_label = as_of or "n/a"
+        figure_footer = (
+            f"As of {as_of_label} • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)"
         )
         content = template.render(
             metrics=metrics_table,
@@ -68,6 +73,8 @@ class ReportBuilder:
             jackknife=jackknife,
             meta_files=meta_files or [],
             figures=figures,
+            figure_footer=figure_footer,
+            as_of_label=as_of_label,
             metadata={"generated_at": datetime.utcnow().isoformat()},
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)

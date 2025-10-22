@@ -1,6 +1,7 @@
 # Gas Market Forecast Report
 
 Generated on {{ metadata.generated_at }}
+Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]({{ path }}){% if not loop.last %}, {% endif %}{% endfor %}{% else %}n/a{% endif %}
 
 ## Data Sources & Provenance
 | Source | Mode | As Of | Fresh | Records | Path |
@@ -40,8 +41,10 @@ Generated on {{ metadata.generated_at }}
 {% endif %}
 
 ![Risk Box]({{ figures.risk_box }})
+_{{ figure_footer }}_
 
 ![Fundamentals Dashboard]({{ figures.fundamentals }})
+_{{ figure_footer }}_
 
 ## Forecast Performance
 ### Ensemble Metrics
@@ -71,11 +74,14 @@ Generated on {{ metadata.generated_at }}
 {% endfor %}
 
 ![Forecast vs Actual]({{ figures.forecast }})
+_{{ figure_footer }}_
 
 ![Calibration Curve]({{ figures.calibration }})
+_{{ figure_footer }}_
 
 ## Model Outputs
 ![Sensitivity Bars]({{ figures.sensitivity }})
+_{{ figure_footer }}_
 
 ### Posterior Snapshot
 - Mean: {{ "%.4f"|format(posterior.mean) }}
