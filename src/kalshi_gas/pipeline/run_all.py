@@ -328,6 +328,18 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             float(threshold)
         )
 
+    # Write a compact summary for quick consumption
+    summary_payload = {
+        "as_of": dataset_as_of,
+        "threshold": float(event_threshold),
+        "prob_yes": posterior_summary.get(f"prob_ge_{float(event_threshold):.2f}"),
+        "prior_weight": prior_weight,
+        "prior_weight_source": prior_weight_source,
+    }
+    (Path("data_proc") / "summary.json").write_text(
+        json.dumps(summary_payload, indent=2), encoding="utf-8"
+    )
+
     metrics = backtest.metrics
     benchmarks: list[dict[str, float | str | None]] = []
     benchmarks.append(
@@ -515,6 +527,13 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     # Headline should reflect the central/event threshold, not the first bin
     headline_threshold = float(event_threshold)
     headline_probability = posterior_summary.get(f"prob_ge_{headline_threshold:.2f}")
+    headline_date = None
+    try:
+        if dataset_as_of:
+            as_of_ts = pd.to_datetime(dataset_as_of)
+            headline_date = (as_of_ts + MonthEnd(0)).normalize().date().isoformat()
+    except Exception:  # noqa: BLE001
+        headline_date = None
     deck_dir = cfg.data.build_dir / "deck"
     deck_dir.mkdir(parents=True, exist_ok=True)
     deck_path = deck_dir / "deck.md"
@@ -528,6 +547,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         sensitivity_bars=sensitivity_bars.to_dict(orient="records"),
         headline_threshold=headline_threshold,
         headline_probability=headline_probability,
+        headline_date=headline_date,
         asymmetry_ci=asymmetry_ci,
         jackknife=jackknife_summary,
         output_path=deck_path,
@@ -551,6 +571,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             "sensitivity_grid": str(sensitivity_path),
             "sensitivity_bars": str(sensitivity_bars_path),
             "provenance": str(provenance_path),
+            "summary": str(Path("data_proc") / "summary.json"),
         },
     }
     artifacts_path = metadata_dir / "artifacts.json"

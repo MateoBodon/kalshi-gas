@@ -92,6 +92,7 @@ class ReportBuilder:
         sensitivity_bars: list[dict[str, object]] | None,
         headline_threshold: float | None,
         headline_probability: float | None,
+        headline_date: str | None,
         asymmetry_ci: tuple[float, float, float] | None,
         jackknife: str | None,
         output_path: Path,
@@ -109,6 +110,7 @@ class ReportBuilder:
             sensitivity_bars=sensitivity_bars or [],
             headline_threshold=headline_threshold,
             headline_probability=headline_probability,
+            headline_date=headline_date,
             asymmetry_ci=asymmetry_ci,
             jackknife=jackknife,
         )

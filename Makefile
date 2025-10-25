@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install lint test report deck models figures clean check-fresh calibrate freeze-backtest sweep-ensemble update-kalshi-bins
+.PHONY: install lint test report deck models figures clean check-fresh calibrate freeze-backtest sweep-ensemble update-kalshi-bins report-live pull-eia-html pull-wpsr-html
 
 install:
 	$(PYTHON) -m pip install -e .[dev]
@@ -41,3 +41,14 @@ sweep-ensemble:
 
 update-kalshi-bins:
 	$(PYTHON) scripts/update_kalshi_bins.py
+
+# Convenience live run (requires env: KALSHI_GAS_USE_LIVE=1, EIA_API_KEY, and Kalshi creds if used)
+report-live:
+	KALSHI_GAS_USE_LIVE=1 $(PYTHON) -m kalshi_gas.cli report
+
+# Snapshot helpers for WPSR/EIA HTML (for parser tests or delayed API days)
+pull-wpsr-html:
+	$(PYTHON) scripts/freeze_wpsr_html.py
+
+pull-eia-html:
+	$(PYTHON) scripts/freeze_eia_html.py

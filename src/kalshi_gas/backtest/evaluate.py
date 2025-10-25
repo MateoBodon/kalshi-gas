@@ -217,7 +217,18 @@ def run_backtest(
             metrics["posterior_brier"] = brier_score(posterior_probs, outcomes)
             metrics["prior_weight_calibrated"] = calibrated_weight
             metrics["posterior_brier_se"] = jackknife_brier(posterior_probs, outcomes)
-            metrics["crps_posterior"] = metrics["posterior_brier"]
+            # CRPS for the posterior mixture: use a convex combination of component CRPS values
+            # as a practical approximation (no closed-form for mixture here).
+            crps_like = metrics.get("crps")
+            crps_prior = metrics.get("crps_prior")
+            if crps_prior is not None and crps_like is not None:
+                metrics["crps_posterior"] = (1 - calibrated_weight) * float(
+                    crps_like
+                ) + calibrated_weight * float(crps_prior)
+            else:
+                # Fallback to likelihood CRPS if prior CRPS is unavailable
+                if crps_like is not None:
+                    metrics["crps_posterior"] = float(crps_like)
 
     if "posterior_event_probability" not in test.columns:
         test["posterior_event_probability"] = test["event_probability"]

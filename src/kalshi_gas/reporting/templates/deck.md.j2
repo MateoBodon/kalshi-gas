@@ -4,7 +4,7 @@ Generated on {{ metadata.generated_at }}
 
 ## Headline Probability
 {% if headline_threshold is not none %}
-- Event: Retail ≥ {{ "%.2f"|format(headline_threshold) }} USD/gal (next week)
+- Event: Retail ≥ {{ "%.2f"|format(headline_threshold) }} USD/gal{% if headline_date %} on {{ headline_date }}{% endif %}
 - Posterior probability: {{ "%.1f"|format((headline_probability or 0) * 100) }}%
 {% endif %}
 - Posterior mean: {{ "%.2f"|format(posterior.mean) }} USD/gal

@@ -1,10 +1,10 @@
 thresholds:
-- 3.05
-- 3.1
-- 3.15
-- 3.2
+  # Center the event around 3.10 with an odd count
+  - 3.05
+  - 3.10
+  - 3.15
 probabilities:
-- 0.5
-- 0.995
-- 0.5
-- 0.995
+  # Monotone CDF guesses (P(≤ threshold)); replace via update-kalshi-bins when live
+  - 0.30
+  - 0.50
+  - 0.70
