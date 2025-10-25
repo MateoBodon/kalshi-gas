@@ -48,6 +48,8 @@ export EIA_API_KEY="<your_eia_key>"
 export KALSHI_API_BASE="https://api.elections.kalshi.com"
 export KALSHI_API_KEY_ID="<your_key_id>"
 export KALSHI_PRIVATE_KEY_PATH="$HOME/.kalshi/kalshi_private_key.pem"
+# Optional: some clients read the PEM from an env var
+export KALSHI_PY_PRIVATE_KEY_PEM="$(cat "$HOME/.kalshi/kalshi_private_key.pem")"
 # AAA gas series/event (update monthly to last day):
 export KALSHI_SERIES_TICKER="KXAAAGASM"
 export KALSHI_EVENT_TICKER="KXAAAGASM-25OCT31"
