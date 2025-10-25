@@ -28,6 +28,7 @@ from kalshi_gas.reporting.visuals import (
 from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 from kalshi_gas.risk.gates import evaluate_risk
 from kalshi_gas.utils.thresholds import load_kalshi_thresholds
+from pandas.tseries.offsets import MonthEnd
 
 
 def _load_json(path: Path) -> dict | None:
@@ -177,7 +178,57 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "adjustments": risk_adjustments,
     }
 
+    # Load freeze-date backtest metrics if available and expose in risk_context for report rendering
+    freeze_metrics = _load_json(Path("data_proc") / "backtest_metrics.json")
+    freeze_benchmarks: list[dict[str, float | str]] | None = None
+    if isinstance(freeze_metrics, dict):
+        per_thr = freeze_metrics.get("per_threshold", {})
+        key = f"{event_threshold:.2f}"
+        if key in per_thr and isinstance(per_thr[key], dict):
+            row = per_thr[key]
+
+            def _get(model: str, metric: str) -> float | None:
+                block = row.get(model)
+                if isinstance(block, dict):
+                    val = block.get(metric)
+                    return float(val) if val is not None else None
+                return None
+
+            freeze_benchmarks = [
+                {
+                    "model": "Posterior",
+                    "brier": _get("posterior", "brier"),
+                    "crps": _get("posterior", "crps"),
+                },
+                {
+                    "model": "Carry Forward",
+                    "brier": _get("carry", "brier"),
+                    "crps": _get("carry", "crps"),
+                },
+                {
+                    "model": "RBOB Only",
+                    "brier": _get("rbob", "brier"),
+                    "crps": _get("rbob", "crps"),
+                },
+                {
+                    "model": "Kalshi Prior",
+                    "brier": _get("prior", "brier"),
+                    "crps": _get("prior", "crps"),
+                },
+            ]
+    if freeze_benchmarks is not None:
+        risk_context["freeze_benchmarks"] = freeze_benchmarks
+
     live_ensemble = EnsembleModel(weights=ensemble_weights)
+    # Dynamically set nowcast horizon to month-end (e.g., Oct 31) based on dataset_as_of
+    if dataset_as_of:
+        try:
+            as_of_ts = pd.to_datetime(dataset_as_of)
+            target_date = (as_of_ts + MonthEnd(0)).normalize()
+            horizon_days = max(1, int((target_date - as_of_ts).days))
+            live_ensemble.nowcast.horizon = horizon_days
+        except Exception:  # noqa: BLE001
+            pass
     if drift_bump > 0:
         lower, upper = live_ensemble.nowcast.drift_bounds
         live_ensemble.nowcast.drift_bounds = (lower, upper + drift_bump)
@@ -205,9 +256,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             beta_up_scale=beta_up_scale,
             beta_dn_scale=beta_dn_scale,
         )
-        adjusted_samples = (
-            base_samples + alpha_shift + alpha_delta + beta_effect * rbob_delta
-        )
+        adjusted = base_samples + alpha_shift + alpha_delta + beta_effect * rbob_delta
+        # Clip to a tighter plausible retail range to reduce CRPS
+        adjusted_samples = np.clip(adjusted, 2.60, 4.40)
         return PosteriorDistribution(
             samples=adjusted_samples,
             prior_cdf=prior_fn,
@@ -371,6 +422,31 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         source=model_source,
     )
 
+    # Additional figures: structural pass-through fit, prior CDF, posterior density
+    from kalshi_gas.reporting.visuals import (
+        plot_pass_through_fit,
+        plot_prior_cdf,
+        plot_posterior_density,
+    )
+
+    structural_fig = figures_dir / "pass_through_fit.png"
+    try:
+        plot_pass_through_fit(dataset, structural, structural_fig)
+    except Exception:  # noqa: BLE001
+        pass
+
+    prior_cdf_fig = figures_dir / "prior_cdf.png"
+    try:
+        plot_prior_cdf(thresholds, prior_model.cdf_values, prior_cdf_fig)
+    except Exception:  # noqa: BLE001
+        pass
+
+    posterior_fig = figures_dir / "posterior.png"
+    try:
+        plot_posterior_density(base_posterior.samples, event_threshold, posterior_fig)
+    except Exception:  # noqa: BLE001
+        pass
+
     results_csv = memo_dir / "forecast_results.csv"
     backtest.test_frame.to_csv(results_csv, index=False)
 
@@ -384,6 +460,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             "fundamentals": fundamentals_fig,
             "risk_box": risk_box_fig,
             "sensitivity": sensitivity_fig,
+            "pass_through": structural_fig,
+            "prior_cdf": prior_cdf_fig,
+            "posterior": posterior_fig,
         }.items()
     }
     builder.build(
@@ -405,12 +484,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         as_of=dataset_as_of,
     )
 
-    headline_threshold = float(thresholds[0]) if len(thresholds) > 0 else None
-    headline_probability = (
-        posterior_summary.get(f"prob_ge_{headline_threshold:.2f}")
-        if headline_threshold is not None
-        else None
-    )
+    # Headline should reflect the central/event threshold, not the first bin
+    headline_threshold = float(event_threshold)
+    headline_probability = posterior_summary.get(f"prob_ge_{headline_threshold:.2f}")
     deck_dir = cfg.data.build_dir / "deck"
     deck_dir.mkdir(parents=True, exist_ok=True)
     deck_path = deck_dir / "deck.md"
@@ -471,6 +547,9 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             "fundamentals": fundamentals_fig,
             "risk_box": risk_box_fig,
             "sensitivity": sensitivity_fig,
+            "pass_through": structural_fig,
+            "prior_cdf": prior_cdf_fig,
+            "posterior": posterior_fig,
         },
         "provenance_path": provenance_path,
         "prior_weight": prior_weight,
@@ -482,4 +561,5 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "meta_files": [str(path) for path in meta_paths],
         "asymmetry_ci": asymmetry_ci,
         "jackknife_summary": jackknife_summary,
+        "freeze_benchmarks": freeze_benchmarks,
     }

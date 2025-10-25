@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install lint test report deck models figures clean check-fresh
+.PHONY: install lint test report deck models figures clean check-fresh calibrate freeze-backtest sweep-ensemble update-kalshi-bins
 
 install:
 	$(PYTHON) -m pip install -e .[dev]
@@ -29,3 +29,15 @@ figures:
 
 clean:
 	rm -rf build data/raw/* data/interim/* data/processed/*
+
+calibrate:
+	$(PYTHON) -m kalshi_gas.backtest.calibrate_prior
+
+freeze-backtest:
+	$(PYTHON) -m kalshi_gas.pipeline.backtest
+
+sweep-ensemble:
+	$(PYTHON) -m kalshi_gas.backtest.sweep_ensemble
+
+update-kalshi-bins:
+	$(PYTHON) scripts/update_kalshi_bins.py

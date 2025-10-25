@@ -53,7 +53,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "risk_gates": {
         "nhc_active_threshold": 1,
-        "wpsr_inventory_cutoff": -1.5,
+        # Align with competition plan: draw > 3.0 mmbbl (i.e., change <= -3.0)
+        "wpsr_inventory_cutoff": -3.0,
     },
 }
 

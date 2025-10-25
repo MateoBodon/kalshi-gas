@@ -61,6 +61,16 @@ _{{ figure_footer }}_
 {% set brier = row.get('brier') %}{% set crps = row.get('crps') %}
 | {{ row.get('model') }} | {{ "%.4f"|format(brier) if brier is not none else "" }} | {{ "%.4f"|format(crps) if crps is not none else "" }} |
 {% endfor %}
+{% set freeze = risk_context.get('freeze_benchmarks') if risk_context else None %}
+{% if freeze %}
+
+### Freeze-date Metrics (central threshold)
+| Model | Brier | CRPS |
+| --- | --- | --- |
+{% for row in freeze -%}
+| {{ row.get('model') }} | {{ "%.4f"|format(row.get('brier')) if row.get('brier') is not none else "" }} | {{ "%.4f"|format(row.get('crps')) if row.get('crps') is not none else "" }} |
+{% endfor %}
+{% endif %}
 {% if jackknife %}
 
 **Jackknife Stability:** {{ jackknife }}
@@ -95,6 +105,15 @@ _{{ figure_footer }}_
 {% for key, value in posterior.items() if key.startswith("prob_ge_") -%}
 - {{ key }}: {{ "%.4f"|format(value) }}
 {% endfor %}
+
+![Pass-through Fit]({{ figures.pass_through }})
+_{{ figure_footer }}_
+
+![Market-implied Prior CDF]({{ figures.prior_cdf }})
+_{{ figure_footer }}_
+
+![Posterior Density]({{ figures.posterior }})
+_{{ figure_footer }}_
 
 ### Sensitivity Grid (Detail)
 | Threshold | ΔRBOB | ΔAlpha | Prob ≥ Threshold |

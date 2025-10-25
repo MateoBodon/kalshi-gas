@@ -1,0 +1,17 @@
+data:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  external_dir: data/external
+  build_dir: build
+model:
+  ensemble_weights:
+    nowcast: 0.0
+    pass_through: 1.0
+    market_prior: 0.0
+  calibration_bins: 10
+  horizon_days: 7
+  prior_weight: 0.35
+risk_gates:
+  nhc_active_threshold: 1
+  wpsr_inventory_cutoff: -3.0

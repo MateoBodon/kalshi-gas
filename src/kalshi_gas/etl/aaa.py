@@ -10,6 +10,7 @@ from typing import Dict, TypedDict
 
 import pandas as pd
 from bs4 import BeautifulSoup, Tag
+import requests
 from dateutil import parser as date_parser
 
 from kalshi_gas.config import PipelineConfig
@@ -312,11 +313,77 @@ class AAAExtractor:
                     provenance=self.provenance,
                 )
             except Exception as exc:  # noqa: BLE001
-                log.warning("AAA live fetch failed, will try fallbacks: %s", exc)
-                fallback_chain.append(f"live_error:{exc.__class__.__name__}")
-                selection = get_source(
-                    "aaa", sample_path=self.sample_path, allow_live=False
+                log.warning(
+                    "AAA live JSON fetch failed (%s); trying HTML fallback", exc
                 )
+                # HTML fallback: fetch homepage with user-agent and parse
+                try:
+                    html_resp = requests.get(
+                        "https://gasprices.aaa.com/",
+                        headers={
+                            "User-Agent": (
+                                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/126.0 Safari/537.36"
+                            )
+                        },
+                        timeout=30,
+                    )
+                    html_resp.raise_for_status()
+                    payload = parse_aaa_national(html_resp.text)
+                    price = (
+                        float(payload["price"])
+                        if payload.get("price") is not None
+                        else None
+                    )
+                    as_of_str = payload.get("as_of_date")
+                    if price is None:
+                        raise ValueError("AAA HTML parse missing price")
+                    # Fallback as_of to today if parsing fails
+                    if not as_of_str:
+                        as_of_str = datetime.now(timezone.utc).date().isoformat()
+                    frame = pd.DataFrame(
+                        [
+                            {
+                                "date": pd.to_datetime(as_of_str),
+                                "regular_gas_price": price,
+                            }
+                        ]
+                    )
+                    fetched_at = utcnow_iso()
+                    metadata = {
+                        "source": "aaa",
+                        "mode": "live_html",
+                        "as_of": as_of_str,
+                        "fetched_at": fetched_at,
+                        "url": "https://gasprices.aaa.com/",
+                    }
+                    save_snapshot(frame, self.last_good_path, metadata=metadata)
+                    self.provenance = DataProvenance(
+                        source="aaa",
+                        mode="live",
+                        path=self.last_good_path,
+                        fetched_at=fetched_at,
+                        as_of=as_of_str,
+                        fresh=True,
+                        records=int(len(frame)),
+                        details={
+                            "url": "https://gasprices.aaa.com/",
+                            "last_good_path": str(self.last_good_path),
+                            "fallback": "html",
+                        },
+                        fallback_chain=fallback_chain,
+                    )
+                    return ExtractorResult(
+                        frame=frame[["date", "regular_gas_price"]],
+                        provenance=self.provenance,
+                    )
+                except Exception as html_exc:  # noqa: BLE001
+                    log.warning("AAA HTML fallback failed: %s", html_exc)
+                    fallback_chain.append("live_error:AAA_HTML")
+                    selection = get_source(
+                        "aaa", sample_path=self.sample_path, allow_live=False
+                    )
 
         last_good_meta = None
         if selection.mode == "last_good" and self.last_good_path.exists():

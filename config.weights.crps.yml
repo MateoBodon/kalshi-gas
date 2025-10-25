@@ -1,0 +1,5 @@
+model:
+  ensemble_weights:
+    nowcast: 0.0
+    pass_through: 1.0
+    market_prior: 0.0

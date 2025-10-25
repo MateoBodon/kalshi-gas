@@ -37,9 +37,27 @@ Set `KALSHI_GAS_USE_LIVE=1` to enable live HTTP pulls. Additional credentials:
 | Source | Variables |
 | --- | --- |
 | EIA | `EIA_API_KEY` |
-| Kalshi | `KALSHI_EMAIL`, `KALSHI_PASSWORD` |
+| Kalshi | `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, `KALSHI_API_BASE` (default `https://api.elections.kalshi.com`), optional `KALSHI_SERIES_TICKER` and `KALSHI_EVENT_TICKER` |
 
-Without these, the pipeline defaults to deterministic sample data.
+Example session (RSA-PSS per Kalshi docs):
+
+```bash
+source .venv/bin/activate
+export KALSHI_GAS_USE_LIVE=1
+export EIA_API_KEY="<your_eia_key>"
+export KALSHI_API_BASE="https://api.elections.kalshi.com"
+export KALSHI_API_KEY_ID="<your_key_id>"
+export KALSHI_PRIVATE_KEY_PATH="$HOME/.kalshi/kalshi_private_key.pem"
+# AAA gas series/event (update monthly to last day):
+export KALSHI_SERIES_TICKER="KXAAAGASM"
+export KALSHI_EVENT_TICKER="KXAAAGASM-25OCT31"
+make update-kalshi-bins && make report
+```
+
+EIA/RBOB default API series (with HTML fallbacks):
+- RBOB weekly: `PET.RBRTWD.W`
+- Gasoline stocks weekly: `PET.WGTSTUS1.W`
+- Retail weekly US regular (optional): `PET.EMM_EPMRR_PTE_NUS_DPG.W`
 
 ## Fallback & Freshness
 
@@ -64,3 +82,39 @@ make test
 ```
 
 CI runs linting and tests on push (see `.github/workflows/ci.yml`).
+
+## Acceptance & Repro
+
+- CRPS-optimal (production) weights:
+```bash
+cat > config.crps.yaml <<'YML'
+data:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  external_dir: data/external
+  build_dir: build
+model:
+  ensemble_weights:
+    nowcast: 0.0
+    pass_through: 1.0
+    market_prior: 0.0
+  calibration_bins: 10
+  horizon_days: 7
+  prior_weight: 0.35
+risk_gates:
+  nhc_active_threshold: 1
+  wpsr_inventory_cutoff: -3.0
+YML
+python -m kalshi_gas.cli report --config config.crps.yaml
+```
+
+- Freeze-date backtest and metrics at 3.10:
+```bash
+make freeze-backtest
+python - <<'PY'
+import json, pathlib
+s=json.loads(pathlib.Path('data_proc/backtest_metrics.json').read_text())
+print(json.dumps(s.get('per_threshold',{}).get('3.10',{}), indent=2))
+PY
+```

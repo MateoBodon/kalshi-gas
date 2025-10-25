@@ -139,6 +139,8 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
         ) -> PosteriorDistribution:
             beta_effect = _select_beta(rbob_delta, structural)
             adjusted_samples = base_samples + alpha_delta + beta_effect * rbob_delta
+            # Clip to a plausible retail range to reduce CRPS blowups
+            adjusted_samples = np.clip(adjusted_samples, 2.60, 4.40)
             return PosteriorDistribution(
                 samples=adjusted_samples,
                 prior_cdf=prior_fn,

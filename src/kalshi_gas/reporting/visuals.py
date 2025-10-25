@@ -231,3 +231,89 @@ def plot_sensitivity_bars(
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
     return output_path
+
+
+def plot_pass_through_fit(
+    data: pd.DataFrame, structural: dict, output_path: Path
+) -> Path:
+    """Scatter ΔRetail vs lagged ΔRBOB with fitted beta annotations."""
+    lag = int(structural.get("lag", 0) or 0)
+    fig, ax = plt.subplots(figsize=(6.5, 4))
+    if lag <= 0 or len(data) <= lag:
+        ax.text(0.5, 0.5, "No structural fit available", ha="center", va="center")
+        ax.axis("off")
+    else:
+        df = data.copy()
+        df["delta_price"] = df["regular_gas_price"].astype(float).diff()
+        df["delta_rbob_lag"] = df["rbob_settle"].astype(float).diff().shift(lag)
+        df = df.dropna()
+        ax.scatter(
+            df["delta_rbob_lag"], df["delta_price"], s=12, alpha=0.6, color="#1f77b4"
+        )
+        beta = structural.get("beta")
+        bu = structural.get("beta_up")
+        bd = structural.get("beta_dn")
+        if beta is not None:
+            xs = np.linspace(
+                df["delta_rbob_lag"].min(), df["delta_rbob_lag"].max(), 100
+            )
+            ax.plot(xs, float(beta) * xs, color="#d62728", label=f"β={float(beta):.3f}")
+        if bu is not None and bd is not None:
+            ax.legend(title=f"β↑={float(bu):.3f}, β↓={float(bd):.3f} (L={lag}d)")
+        ax.set_xlabel(f"Δ RBOB (lag {lag}d)")
+        ax.set_ylabel("Δ Retail")
+        ax.set_title("Pass-through: ΔRetail vs lagged ΔRBOB")
+        ax.grid(alpha=0.2)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def plot_prior_cdf(
+    thresholds: np.ndarray | list[float],
+    cdf_values: np.ndarray | list[float],
+    output_path: Path,
+) -> Path:
+    """Render market-implied prior CDF over thresholds."""
+    x = np.asarray(thresholds, dtype=float)
+    y = np.asarray(cdf_values, dtype=float)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(x, y, marker="o", color="#9467bd")
+    ax.set_xlabel("Price threshold (USD/gal)")
+    ax.set_ylabel("CDF")
+    ax.set_title("Market-implied Prior CDF")
+    ax.set_ylim(0, 1)
+    ax.grid(alpha=0.2)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def plot_posterior_density(
+    samples: np.ndarray | list[float], threshold: float | None, output_path: Path
+) -> Path:
+    """Plot posterior sample density with event threshold marker."""
+    draws = np.asarray(samples, dtype=float)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    sns.kdeplot(draws, ax=ax, fill=True, alpha=0.5, color="#2ca02c")
+    ax.set_xlabel("Price (USD/gal)")
+    ax.set_ylabel("Density")
+    ax.set_title("Posterior Density")
+    if threshold is not None:
+        ax.axvline(
+            float(threshold),
+            color="#d62728",
+            linestyle="--",
+            label=f"≥ {float(threshold):.2f}",
+        )
+        ax.legend()
+    ax.grid(alpha=0.2)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
