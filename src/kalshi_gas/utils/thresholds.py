@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 
 import numpy as np
 import yaml
+from sklearn.isotonic import IsotonicRegression
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,21 @@ def load_kalshi_thresholds(path: Path | None = None) -> ThresholdBundle:
     unique_thresholds = np.unique(thresholds)
     if len(unique_thresholds) != len(thresholds):
         raise ValueError("Kalshi thresholds must be unique")
+
+    # Optional isotonic smoothing of provided CDF points to enforce monotonicity
+    # Set KALSHI_GAS_SMOOTH_BINS=1 to enable
+    if os.getenv("KALSHI_GAS_SMOOTH_BINS", "0") == "1":
+        # Preserve original order; fit on sorted x
+        order = np.argsort(thresholds)
+        x_sorted = thresholds[order]
+        y_sorted = probabilities[order]
+        iso = IsotonicRegression(
+            y_min=0.0, y_max=1.0, increasing=True, out_of_bounds="clip"
+        )
+        y_fit = iso.fit_transform(x_sorted, y_sorted)
+        # Map fitted values back to original order
+        inv_order = np.argsort(order)
+        probabilities = y_fit[inv_order]
 
     central_threshold, central_probability = _compute_central(thresholds, probabilities)
 

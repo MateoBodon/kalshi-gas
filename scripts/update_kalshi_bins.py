@@ -33,7 +33,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 
 API_BASE_V1 = "https://trading-api.kalshi.com/v1"
-API_BASE_V2_DEFAULT = "https://api.kalshi.com"
+API_BASE_V2_DEFAULT = "https://api.elections.kalshi.com"
 
 
 def login_v1(email: str, password: str) -> str:

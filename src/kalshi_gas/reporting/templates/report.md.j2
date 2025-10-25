@@ -10,6 +10,10 @@ Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]
 | {{ record.source }} | {{ record.mode }} | {{ record.as_of|default("n/a", true) }} | {{ "yes" if record.fresh else "no" }} | {{ record.records|default("", true) }} | {{ record.path|default("", true) }} |
 {% endfor %}
 
+{% if risk_context and risk_context.get('kalshi') %}
+> Market reference: series {{ risk_context['kalshi'].get('series_ticker') or 'n/a' }}, event {{ risk_context['kalshi'].get('event_ticker') or 'n/a' }} (Kalshi resolves off AAA).
+{% endif %}
+
 ## Risk Dashboard
 - NHC alert: **{{ "ON" if risk.nhc_alert else "OFF" }}** ({{ risk.details["nhc"]["active_storms"] }} active storms vs threshold {{ risk.details["nhc"]["threshold"] }})
 - WPSR alert: **{{ "ON" if risk.wpsr_alert else "OFF" }}** (latest change {{ "%.2f"|format(risk.details["wpsr"]["latest_change"]) }} vs {{ "%.2f"|format(risk.details["wpsr"]["threshold"]) }})

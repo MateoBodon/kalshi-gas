@@ -79,7 +79,15 @@ def wpsr_gate(
     config: PipelineConfig,
 ) -> tuple[bool, dict]:
     threshold = float(config.risk_gates.get("wpsr_inventory_cutoff", -1.5))
-    latest_change = float(dataset["inventory_change"].iloc[-1])
+    # Gracefully handle missing or empty datasets in live runs
+    latest_change = 0.0
+    if (
+        isinstance(dataset, pd.DataFrame)
+        and not dataset.empty
+        and "inventory_change" in dataset.columns
+        and dataset["inventory_change"].notna().any()
+    ):
+        latest_change = float(dataset["inventory_change"].dropna().iloc[-1])
     draw = max(0.0, -latest_change)
 
     # Prefer parsed HTML snapshot if available; otherwise, use analyst YAML
