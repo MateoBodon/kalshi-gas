@@ -10,6 +10,7 @@ import pandas as pd
 import yaml
 
 from kalshi_gas.config import PipelineConfig
+from kalshi_gas.etl.eia import parse_wpsr_summary
 
 
 @dataclass
@@ -41,6 +42,18 @@ def load_wpsr_state(path: Path) -> dict:
     return payload
 
 
+def load_wpsr_summary_html(path: Path) -> dict | None:
+    """Parse WPSR summary metrics from a saved HTML snapshot, if present."""
+    if not path.exists():
+        return None
+    try:
+        html = path.read_text(encoding="utf-8")
+        summary = parse_wpsr_summary(html)
+        return summary
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def nhc_gate(config: PipelineConfig) -> tuple[bool, dict]:
     threshold = int(config.risk_gates.get("nhc_active_threshold", 1))
     fallback_path = Path("data/sample/nhc_outlook.csv")
@@ -69,10 +82,17 @@ def wpsr_gate(
     latest_change = float(dataset["inventory_change"].iloc[-1])
     draw = max(0.0, -latest_change)
 
-    state_path = Path("data_raw/wpsr_state.yml")
-    state = load_wpsr_state(state_path)
-    refinery_util = float(state.get("refinery_util_pct", 92.0))
-    product_supplied = float(state.get("product_supplied_mbd", 8.8))
+    # Prefer parsed HTML snapshot if available; otherwise, use analyst YAML
+    html_path = Path("data_raw/wpsr_summary.html")
+    parsed = load_wpsr_summary_html(html_path)
+    if parsed:
+        refinery_util = float(parsed.get("refinery_util_pct", 92.0))
+        product_supplied = float(parsed.get("product_supplied_mbd", 8.8))
+    else:
+        state_path = Path("data_raw/wpsr_state.yml")
+        state = load_wpsr_state(state_path)
+        refinery_util = float(state.get("refinery_util_pct", 92.0))
+        product_supplied = float(state.get("product_supplied_mbd", 8.8))
 
     alert = latest_change <= threshold
     return alert, {

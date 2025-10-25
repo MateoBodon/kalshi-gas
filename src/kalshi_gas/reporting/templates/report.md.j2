@@ -106,6 +106,14 @@ _{{ figure_footer }}_
 - {{ key }}: {{ "%.4f"|format(value) }}
 {% endfor %}
 
+{% if risk_context %}
+{% set alpha_note = risk_context.get('alpha_note') %}
+{% if alpha_note %}
+
+_α_t note_: {{ alpha_note }}
+{% endif %}
+{% endif %}
+
 ![Pass-through Fit]({{ figures.pass_through }})
 _{{ figure_footer }}_
 

@@ -51,7 +51,9 @@ export KALSHI_PRIVATE_KEY_PATH="$HOME/.kalshi/kalshi_private_key.pem"
 # AAA gas series/event (update monthly to last day):
 export KALSHI_SERIES_TICKER="KXAAAGASM"
 export KALSHI_EVENT_TICKER="KXAAAGASM-25OCT31"
-make update-kalshi-bins && make report
+# Update market-implied prior bins before building the report
+make update-kalshi-bins
+make report
 ```
 
 EIA/RBOB default API series (with HTML fallbacks):

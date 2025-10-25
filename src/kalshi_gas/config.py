@@ -24,6 +24,7 @@ class ModelConfig:
     calibration_bins: int
     horizon_days: int
     prior_weight: float
+    nowcast_drift_bounds: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "calibration_bins": 10,
         "horizon_days": 7,
         "prior_weight": 0.35,
+        # Autumn drift prior bounds (USD/gal per day)
+        "nowcast_drift_bounds": [-0.004, 0.0],
     },
     "risk_gates": {
         "nhc_active_threshold": 1,
@@ -79,6 +82,13 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
         build_dir=(project_root / data_cfg["build_dir"]).resolve(),
     )
 
+    drift_bounds = model_cfg.get("nowcast_drift_bounds")
+    nowcast_drift_bounds: tuple[float, float] | None
+    if isinstance(drift_bounds, (list, tuple)) and len(drift_bounds) == 2:
+        nowcast_drift_bounds = (float(drift_bounds[0]), float(drift_bounds[1]))
+    else:
+        nowcast_drift_bounds = None
+
     return PipelineConfig(
         data=data_paths,
         model=ModelConfig(
@@ -86,6 +96,7 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
             calibration_bins=int(model_cfg["calibration_bins"]),
             horizon_days=int(model_cfg["horizon_days"]),
             prior_weight=float(model_cfg.get("prior_weight", 0.35)),
+            nowcast_drift_bounds=nowcast_drift_bounds,
         ),
         risk_gates=risk_cfg,
     )

@@ -133,3 +133,30 @@ def fit_structural_pass_through(
         raise RuntimeError("Unable to fit pass-through model for supplied data")
 
     return best.as_dict()
+
+
+def rolling_alpha_path(
+    data: pd.DataFrame,
+    lag: int,
+    window: int = 26,
+    price_col: str = "regular_gas_price",
+    rbob_col: str = "rbob_settle",
+) -> pd.Series:
+    """Estimate rolling intercept α_t for level mapping Retail_t ≈ α_t + β·F_{t-L}.
+
+    Uses ordinary least squares on a rolling window. Returns a Series indexed to
+    the input with NaNs where the window is insufficient.
+    """
+    df = data[[price_col, rbob_col]].copy()
+    df["rbob_lag"] = df[rbob_col].astype(float).shift(int(lag))
+    alphas = np.full(len(df), np.nan, dtype=float)
+    for i in range(len(df)):
+        lo = max(0, i - int(window) + 1)
+        sub = df.iloc[lo : i + 1].dropna()
+        if len(sub) < max(10, int(window) // 2):
+            continue
+        X = np.vstack([np.ones(len(sub)), sub["rbob_lag"].to_numpy(dtype=float)]).T
+        y = sub[price_col].to_numpy(dtype=float)
+        coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+        alphas[i] = float(coef[0])
+    return pd.Series(alphas, index=data.index, name="alpha_t")

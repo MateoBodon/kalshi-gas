@@ -12,7 +12,7 @@ lint:
 test:
 	$(PYTHON) -m pytest
 
-report: deck
+report:
 	$(PYTHON) -m kalshi_gas.cli report
 
 deck:

@@ -178,6 +178,8 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "adjustments": risk_adjustments,
     }
 
+    # (alpha_t memo note added later after alpha_series is computed)
+
     # Load freeze-date backtest metrics if available and expose in risk_context for report rendering
     freeze_metrics = _load_json(Path("data_proc") / "backtest_metrics.json")
     freeze_benchmarks: list[dict[str, float | str]] | None = None
@@ -229,6 +231,13 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             live_ensemble.nowcast.horizon = horizon_days
         except Exception:  # noqa: BLE001
             pass
+    # Apply configured drift bounds first, then risk-induced drift bump (upper widening)
+    try:
+        cfg_bounds = getattr(cfg.model, "nowcast_drift_bounds", None)
+    except Exception:
+        cfg_bounds = None
+    if cfg_bounds:
+        live_ensemble.nowcast.drift_bounds = tuple(cfg_bounds)
     if drift_bump > 0:
         lower, upper = live_ensemble.nowcast.drift_bounds
         live_ensemble.nowcast.drift_bounds = (lower, upper + drift_bump)
@@ -236,11 +245,30 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     nowcast_sim = live_ensemble.nowcast.simulate()
 
     structural = fit_structural_pass_through(dataset, asymmetry=True)
+    alpha_series = None
+    try:
+        from kalshi_gas.models.structural import rolling_alpha_path
+
+        chosen_lag = int(structural.get("lag", 7) or 7)
+        alpha_series = rolling_alpha_path(dataset, lag=chosen_lag)
+    except Exception:  # noqa: BLE001
+        alpha_series = None
     asymmetry_ci = None
     try:
         asymmetry_ci = PassThroughModel.bootstrap_asymmetry_ci(dataset, structural)
     except ValueError:
         asymmetry_ci = None
+
+    # Add optional alpha_t memo note now that alpha_series is computed
+    if alpha_series is not None and hasattr(alpha_series, "dropna"):
+        try:
+            last_alpha = float(alpha_series.dropna().iloc[-1])
+            alpha_mean = float(alpha_series.dropna().tail(26).mean())
+            risk_context["alpha_note"] = (
+                f"latest α_t={last_alpha:.2f}; 26w mean α_t={alpha_mean:.2f}"
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     prior_fn = _prior_cdf_factory(prior_model)

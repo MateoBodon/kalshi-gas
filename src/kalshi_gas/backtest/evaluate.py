@@ -10,7 +10,10 @@ import numpy as np
 import pandas as pd
 
 from kalshi_gas.backtest.metrics import brier_score, calibration_table, crps_gaussian
+from kalshi_gas.models.prior import MarketPriorCDF
+from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 from kalshi_gas.models.ensemble import EnsembleModel
+from pathlib import Path
 
 
 @dataclass
@@ -126,6 +129,7 @@ def run_backtest(
     )
 
     prior_probs: np.ndarray | None = None
+    prior_crps_val: float | None = None
     rbob_probs: np.ndarray | None = None
 
     if "regular_gas_price" in test.columns:
@@ -159,10 +163,36 @@ def run_backtest(
             sigma=np.full(len(rbob_mean), sigma),
             observation=test["actual"].values,
         )
-    if "kalshi_prob" in test.columns:
-        prior_probs = test["kalshi_prob"].to_numpy(dtype=float)
+    # Prefer market-implied prior from bins; fallback to column kalshi_prob
+    try:
+        bundle = load_kalshi_thresholds(Path("data_raw/kalshi_bins.yml"))
+        prior_model = MarketPriorCDF.fit(bundle.thresholds, bundle.probabilities)
+        # Prior probability at the event threshold is survival(central_threshold)
+        prior_p = prior_model.survival(float(threshold))
+        prior_probs = np.full(len(test), float(prior_p), dtype=float)
+        # Sample CRPS for prior by drawing from isotonic prior
+        x_knots, y_knots = zip(*prior_model.knots)
+        x = np.asarray(x_knots, dtype=float)
+        y = np.asarray(y_knots, dtype=float)
+        u = np.linspace(1e-3, 1 - 1e-3, num=2000)
+        prior_samples = np.interp(u, y, x)
+        prior_crps_val = float(
+            np.mean(
+                [
+                    np.mean(np.abs(prior_samples - obs))
+                    - 0.5
+                    * np.mean(np.abs(prior_samples[:, None] - prior_samples[None, :]))
+                    for obs in test["actual"].to_numpy(dtype=float)
+                ]
+            )
+        )
+    except Exception:
+        if "kalshi_prob" in test.columns:
+            prior_probs = test["kalshi_prob"].to_numpy(dtype=float)
+    if prior_probs is not None:
         metrics["brier_prior"] = brier_score(prior_probs, test["event_outcome"].values)
-        metrics["crps_prior"] = metrics["brier_prior"]
+        if prior_crps_val is not None:
+            metrics["crps_prior"] = prior_crps_val
 
     calib = calibration_table(
         probabilities=test["event_probability"].values,
