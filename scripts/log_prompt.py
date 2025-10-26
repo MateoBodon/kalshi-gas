@@ -3,8 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+import sys
 
-from scripts.log_manual_label import append_log
+
+def _add_repo_to_path() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+
+_add_repo_to_path()
+
+from scripts.log_manual_label import append_log  # noqa: E402
 
 
 def _prompt_float(label: str) -> float | None:

@@ -13,8 +13,8 @@ lint:
 test:
 	$(PYTHON) -m pytest
 
-report:
-	$(PYTHON) -m kalshi_gas.cli report
+report: .mplcache
+	MPLBACKEND=Agg MPLCONFIGDIR=$(CURDIR)/.mplcache XDG_CACHE_HOME=$(CURDIR)/.mplcache $(PYTHON) -m kalshi_gas.cli report
 
 deck:
 	$(PYTHON) -m kalshi_gas.reporting.deck
@@ -31,8 +31,8 @@ figures:
 clean:
 	rm -rf build data/raw/* data/interim/* data/processed/*
 
-calibrate:
-	$(PYTHON) -m kalshi_gas.backtest.calibrate_prior
+calibrate: .mplcache
+	MPLBACKEND=Agg MPLCONFIGDIR=$(CURDIR)/.mplcache XDG_CACHE_HOME=$(CURDIR)/.mplcache $(PYTHON) -m kalshi_gas.backtest.calibrate_prior
 
 freeze-backtest:
 	$(PYTHON) -m kalshi_gas.pipeline.backtest
@@ -64,3 +64,6 @@ log-entry:
 	$(PYTHON) scripts/log_manual_label.py --operator $(OP) --aaa $(AAA) --eia $(EIA) --gasbuddy $(GB) --notes $(NOTES)
 
 daily-run: log-prompt report calibrate
+
+.mplcache:
+	mkdir -p .mplcache
