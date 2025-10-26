@@ -78,8 +78,15 @@ class KalshiExtractor:
         import time
 
         def _load_private_key(path: str):
+            pem_env = read_env("KALSHI_PY_PRIVATE_KEY_PEM")
+            passphrase = read_env("KALSHI_PRIVATE_KEY_PASSPHRASE")
+            password = passphrase.encode("utf-8") if passphrase else None
+            if pem_env:
+                return serialization.load_pem_private_key(
+                    pem_env.encode("utf-8"), password=password
+                )
             with open(path, "rb") as f:
-                return serialization.load_pem_private_key(f.read(), password=None)
+                return serialization.load_pem_private_key(f.read(), password=password)
 
         private_key = _load_private_key(pem_path)
         series_ticker = read_env("KALSHI_SERIES_TICKER")

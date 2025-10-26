@@ -17,7 +17,13 @@ def load_processed_frame(path: Path, date_col: str = "date") -> pd.DataFrame:
 
 
 def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
-    """Return merged time-series for modeling."""
+    """Return merged time-series for modeling with nearest-week joins.
+
+    - Left anchor on AAA daily.
+    - Merge RBOB (often weekly from EIA) via asof backward within 10 days.
+    - Merge EIA weekly via asof backward within 10 days.
+    - Merge Kalshi daily (mean per day), asof within 2 days.
+    """
     aaa_path = config.data.processed_dir / "aaa_daily.csv"
     eia_path = config.data.processed_dir / "eia_weekly.csv"
     rbob_path = config.data.processed_dir / "rbob_prices.csv"
@@ -28,22 +34,53 @@ def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
     eia = load_processed_frame(eia_path)
     kalshi = load_processed_frame(kalshi_path)
 
-    rbob.rename(columns={"rbob_price": "rbob_settle"}, inplace=True)
-
+    # Normalize column names & sort
+    aaa = aaa.sort_values("date")
+    rbob = rbob.sort_values("date").rename(columns={"rbob_price": "rbob_settle"})
+    eia = eia.sort_values("date")
     kalshi = (
         kalshi.groupby("date")
         .agg({"prob_yes": "mean"})
         .rename(columns={"prob_yes": "kalshi_prob"})
         .reset_index()
+        .sort_values("date")
     )
 
-    dataset = (
-        aaa.merge(rbob, on="date", how="left")
-        .merge(
-            eia[["date", "inventory_mmbbl", "inventory_change"]], on="date", how="left"
-        )
-        .merge(kalshi, on="date", how="left")
+    # As-of merges: RBOB and EIA to AAA
+    # Ensure datetime dtype
+    for df in (aaa, rbob, eia, kalshi):
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    merged = aaa.copy()
+
+    # RBOB join (tolerance 10 days)
+    merged = pd.merge_asof(
+        merged.sort_values("date"),
+        rbob.sort_values("date"),
+        on="date",
+        direction="backward",
+        tolerance=pd.Timedelta(days=10),
     )
+
+    # EIA join (inventory & change), tolerance 10 days
+    merged = pd.merge_asof(
+        merged.sort_values("date"),
+        eia[["date", "inventory_mmbbl", "inventory_change"]].sort_values("date"),
+        on="date",
+        direction="backward",
+        tolerance=pd.Timedelta(days=10),
+    )
+
+    # Kalshi join (tolerance 2 days)
+    merged = pd.merge_asof(
+        merged.sort_values("date"),
+        kalshi.sort_values("date"),
+        on="date",
+        direction="backward",
+        tolerance=pd.Timedelta(days=2),
+    )
+
+    dataset = merged
 
     dataset.sort_values("date", inplace=True)
     dataset["inventory_mmbbl"] = dataset["inventory_mmbbl"].ffill()

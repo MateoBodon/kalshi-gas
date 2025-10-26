@@ -37,7 +37,7 @@ Set `KALSHI_GAS_USE_LIVE=1` to enable live HTTP pulls. Additional credentials:
 | Source | Variables |
 | --- | --- |
 | EIA | `EIA_API_KEY` |
-| Kalshi | `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, `KALSHI_API_BASE` (default `https://api.elections.kalshi.com`), optional `KALSHI_SERIES_TICKER` and `KALSHI_EVENT_TICKER` |
+| Kalshi | `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, `KALSHI_API_BASE` (default `https://api.elections.kalshi.com`), optional `KALSHI_SERIES_TICKER` and `KALSHI_EVENT_TICKER`; also supports `KALSHI_PRIVATE_KEY_PASSPHRASE` and `KALSHI_PY_PRIVATE_KEY_PEM` |
 
 Example session (RSA-PSS per Kalshi docs):
 
@@ -48,6 +48,9 @@ export EIA_API_KEY="<your_eia_key>"
 export KALSHI_API_BASE="https://api.elections.kalshi.com"
 export KALSHI_API_KEY_ID="<your_key_id>"
 export KALSHI_PRIVATE_KEY_PATH="$HOME/.kalshi/kalshi_private_key.pem"
+# Optional passphrase or inline PEM
+# export KALSHI_PRIVATE_KEY_PASSPHRASE="<passphrase>"
+# export KALSHI_PY_PRIVATE_KEY_PEM="$(cat "$HOME/.kalshi/kalshi_private_key.pem")"
 # Optional: some clients read the PEM from an env var
 export KALSHI_PY_PRIVATE_KEY_PEM="$(cat "$HOME/.kalshi/kalshi_private_key.pem")"
 # AAA gas series/event (update monthly to last day):
@@ -68,6 +71,20 @@ EIA/RBOB default API series (with HTML fallbacks):
 Each ETL component follows a deterministic fallback chain: live API → `data_raw/last_good.*` snapshot → bundled samples in `data/sample/`. Provenance sidecars under `data_proc/meta/` capture the current mode and as-of timestamps. Run `make check-fresh` to assert that the latest last-good snapshots meet freshness guardrails; sample mode automatically skips the check for offline runs.
 
 > ℹ️ The EIA Weekly Petroleum Status Report generally posts Wednesdays at 10:30 ET; release times shift when U.S. federal holidays fall early in the week. Update your `last_good` snapshot accordingly if live pulls are delayed.
+
+## Diagnostics
+
+Use a single command to check each live source, fallback status, probe HTTP endpoints, and print key environment hints:
+
+```bash
+make live-check
+```
+
+This displays mode (live/last_good/sample), as_of date, freshness, records, and the HTTP status for AAA/EIA/Kalshi endpoints. Helpful when live APIs block or rate-limit.
+
+## Data Assembly (nearest-week joins)
+
+The dataset assembler uses nearest-week as-of merges to align weekly EIA and RBOB series with daily AAA dates. This improves robustness when only 1–2 live AAA days are available. Kalshi daily is merged with a 2‑day tolerance window.
 
 ## Project Layout
 

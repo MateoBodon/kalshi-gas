@@ -59,8 +59,15 @@ def fetch_energy_markets_v1(token: str) -> List[Dict[str, object]]:
 
 
 def _load_private_key(pem_path: str):
+    pem_env = os.environ.get("KALSHI_PY_PRIVATE_KEY_PEM")
+    passphrase = os.environ.get("KALSHI_PRIVATE_KEY_PASSPHRASE")
+    password = passphrase.encode("utf-8") if passphrase else None
+    if pem_env:
+        return serialization.load_pem_private_key(
+            pem_env.encode("utf-8"), password=password
+        )
     with open(pem_path, "rb") as f:
-        return serialization.load_pem_private_key(f.read(), password=None)
+        return serialization.load_pem_private_key(f.read(), password=password)
 
 
 def _signed_headers_v2(

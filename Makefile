@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: install lint test report deck models figures clean check-fresh calibrate freeze-backtest sweep-ensemble update-kalshi-bins report-live pull-eia-html pull-wpsr-html
+.PHONY: install lint test report deck models figures clean check-fresh calibrate freeze-backtest sweep-ensemble update-kalshi-bins report-live pull-eia-html pull-wpsr-html live-check
 
 install:
 	$(PYTHON) -m pip install -e .[dev]
@@ -52,3 +52,6 @@ pull-wpsr-html:
 
 pull-eia-html:
 	$(PYTHON) scripts/freeze_eia_html.py
+
+live-check:
+	$(PYTHON) scripts/live_check.py

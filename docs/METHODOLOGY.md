@@ -14,6 +14,10 @@ We estimate the daily retail price nowcast with a local linear trend state‐spa
 
 We simulate the predictive distribution for the settlement horizon by combining the Gaussian forecast with a residual bootstrap. Under risk stress, the drift prior bounds are widened upward by \(+\Delta_{\text{drift}}\) as described in the pipeline.
 
+## Data Alignment (Nearest-week joins)
+
+Live data can be sparse on any given day. To avoid empty merges, the assembler aligns weekly EIA and RBOB series to daily AAA using nearest‑week as‑of joins (backward direction) with sensible tolerances (10 days for EIA/RBOB; 2 days for Kalshi). This preserves continuity without leaking future information.
+
 ## Structural Pass-through
 
 RBOB pass-through is estimated on lagged futures changes. The asymmetric mapping is
