@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import pandas as pd
+import os
 from pathlib import Path
 from typing import Dict, List
-import os
 
 import numpy as np
+import pandas as pd
+
 from kalshi_gas.backtest.evaluate import run_backtest
 from kalshi_gas.config import PipelineConfig, load_config
 from kalshi_gas.data.assemble import assemble_dataset
@@ -26,10 +27,10 @@ from kalshi_gas.reporting.visuals import (
     plot_risk_box,
     plot_sensitivity_bars,
 )
-from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 from kalshi_gas.risk.gates import evaluate_risk
+from kalshi_gas.utils.dataset import frame_digest
 from kalshi_gas.utils.thresholds import load_kalshi_thresholds
-from pandas.tseries.offsets import MonthEnd
+from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 
 
 def _load_json(path: Path) -> dict | None:
@@ -84,16 +85,37 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     provenance_path.write_text(json.dumps(etl_provenance, indent=2), encoding="utf-8")
     dataset = assemble_dataset(cfg)
     dataset_as_of = None
+    dataset_digest = "empty"
     if not dataset.empty:
-        max_date = dataset["date"].max()
+        max_date = dataset["date"].dropna().max()
         if max_date is not None and not pd.isna(max_date):
             dataset_as_of = pd.Timestamp(max_date).normalize().date().isoformat()
+        digest_columns = [
+            col
+            for col in (
+                "date",
+                "regular_gas_price",
+                "rbob_settle",
+                "kalshi_prob",
+                "target_future_price",
+            )
+            if col in dataset.columns
+        ]
+        if digest_columns:
+            dataset_digest = frame_digest(dataset, columns=digest_columns)
 
     threshold_bundle = load_kalshi_thresholds(Path("data_raw/kalshi_bins.yml"))
     thresholds = threshold_bundle.thresholds
     probabilities = threshold_bundle.probabilities
-    event_threshold = threshold_bundle.central_threshold
-    central_probability = threshold_bundle.central_probability
+    configured_threshold = float(
+        getattr(cfg.event, "threshold", threshold_bundle.central_threshold)
+    )
+    event_threshold = configured_threshold
+    central_probability = (
+        threshold_bundle.central_probability
+        if np.isclose(event_threshold, threshold_bundle.central_threshold)
+        else None
+    )
 
     ensemble_weights = cfg.model.ensemble_weights
     ensemble_bt = EnsembleModel(weights=ensemble_weights)
@@ -110,16 +132,26 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         backtest.calibrated_prior_weight = None
         backtest.test_frame = pd.DataFrame()
 
+    prior_weight = float(cfg.model.prior_weight)
     prior_weight_source = "config"
+    prior_weight_meta_note = None
     prior_weight_meta = _load_json(Path("data_proc") / "prior_weight.json")
     if isinstance(prior_weight_meta, dict) and "best_weight" in prior_weight_meta:
-        prior_weight = float(prior_weight_meta["best_weight"])
-        prior_weight_source = "file"
+        meta_digest = prior_weight_meta.get("dataset_digest")
+        if meta_digest and meta_digest == dataset_digest:
+            prior_weight = float(prior_weight_meta["best_weight"])
+            prior_weight_source = "file"
+        else:
+            prior_weight_meta_note = "prior weight calibration stale; dataset mismatch"
     elif backtest.calibrated_prior_weight is not None:
         prior_weight = float(backtest.calibrated_prior_weight)
         prior_weight_source = "calibrated"
-    else:
-        prior_weight = float(cfg.model.prior_weight)
+    if prior_weight_source != "file" and isinstance(prior_weight_meta, dict):
+        if (
+            prior_weight_meta_note is None
+            and prior_weight_meta.get("dataset_as_of") != dataset_as_of
+        ):
+            prior_weight_meta_note = "prior weight calibration as_of mismatch"
 
     risk = evaluate_risk(dataset, cfg)
 
@@ -190,9 +222,24 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "kalshi": {
             "series_ticker": os.getenv("KALSHI_SERIES_TICKER"),
             "event_ticker": os.getenv("KALSHI_EVENT_TICKER"),
+            "threshold": event_threshold,
+            "central_probability": central_probability,
+        },
+        "event": {
+            "name": cfg.event.name,
+            "resolution_date": cfg.event.resolution_date.isoformat(),
+            "threshold": event_threshold,
+        },
+        "dataset": {
+            "as_of": dataset_as_of,
+            "digest": dataset_digest,
+            "rows": int(len(dataset)),
         },
         "adjustments": risk_adjustments,
     }
+    if prior_weight_meta_note:
+        risk_context["prior_weight_note"] = prior_weight_meta_note
+        risk_flags.setdefault("adjustments", []).append(prior_weight_meta_note)
 
     # (alpha_t memo note added later after alpha_series is computed)
 
@@ -242,11 +289,11 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     if dataset_as_of:
         try:
             as_of_ts = pd.to_datetime(dataset_as_of)
-            target_date = (as_of_ts + MonthEnd(0)).normalize()
-            horizon_days = max(1, int((target_date - as_of_ts).days))
-            live_ensemble.nowcast.horizon = horizon_days
+            event_ts = pd.Timestamp(cfg.event.resolution_date)
+            horizon_days = max(1, int((event_ts - as_of_ts).days))
         except Exception:  # noqa: BLE001
-            pass
+            horizon_days = cfg.model.horizon_days
+        live_ensemble.nowcast.horizon = horizon_days
     # Apply configured drift bounds first, then risk-induced drift bump (upper widening)
     try:
         cfg_bounds = getattr(cfg.model, "nowcast_drift_bounds", None)
@@ -349,6 +396,8 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             pass
 
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
+    if central_probability is None:
+        central_probability = prior_model.survival(event_threshold)
     prior_fn = _prior_cdf_factory(prior_model)
 
     base_samples = nowcast_sim.samples
@@ -399,6 +448,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     posterior_summary["prior_weight"] = prior_weight
     posterior_summary["prior_weight_source"] = prior_weight_source
     posterior_summary["event_threshold"] = event_threshold
+    posterior_summary["dataset_digest"] = dataset_digest
     if central_probability is not None:
         posterior_summary["central_kalshi_probability"] = central_probability
     for threshold in thresholds:
@@ -413,6 +463,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         "prob_yes": posterior_summary.get(f"prob_ge_{float(event_threshold):.2f}"),
         "prior_weight": prior_weight,
         "prior_weight_source": prior_weight_source,
+        "dataset_digest": dataset_digest,
     }
     (Path("data_proc") / "summary.json").write_text(
         json.dumps(summary_payload, indent=2), encoding="utf-8"
@@ -629,13 +680,7 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
     # Headline should reflect the central/event threshold, not the first bin
     headline_threshold = float(event_threshold)
     headline_probability = posterior_summary.get(f"prob_ge_{headline_threshold:.2f}")
-    headline_date = None
-    try:
-        if dataset_as_of:
-            as_of_ts = pd.to_datetime(dataset_as_of)
-            headline_date = (as_of_ts + MonthEnd(0)).normalize().date().isoformat()
-    except Exception:  # noqa: BLE001
-        headline_date = None
+    headline_date = cfg.event.resolution_date.isoformat()
     deck_dir = cfg.data.build_dir / "deck"
     deck_dir.mkdir(parents=True, exist_ok=True)
     deck_path = deck_dir / "deck.md"

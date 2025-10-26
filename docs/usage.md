@@ -17,6 +17,10 @@ model:
 risk_gates:
   nhc_active_threshold: 2
   wpsr_inventory_cutoff: -2.0
+event:
+  name: AAA > $3.10 on Oct 31, 2025
+  resolution_date: 2025-10-31
+  threshold: 3.10
 ```
 
 ## Workflow Targets
@@ -28,6 +32,12 @@ risk_gates:
 | `make test` | Execute the pytest suite |
 | `make lint` | Run Ruff (style) and mypy (typing) checks |
 | `make live-check` | Diagnose live sources: status, probes, and env hints |
+| `python scripts/log_prompt.py` | Interactive prompt for manual AAA/EIA logging |
+| `python scripts/log_manual_label.py --operator MB --aaa 3.112 --eia 3.115` | Append a manual AAA/EIA observation |
+| `python scripts/bootstrap_last_good.py` | Promote offline CSVs to `last_good.*` snapshots |
+| `python scripts/update_wpsr_state.py --latest-change -3.8 --refinery-util 88.5 --product-supplied 8.4` | Refresh risk-gate inventory context |
+| `python scripts/update_nhc_flag.py --flag --note "Disturbance in Gulf"` | Toggle the NHC analyst override |
+| `python scripts/simulate_market_data.py` | Generate a full synthetic dataset for offline modelling |
 
 ## Extending Data Sources
 
@@ -51,6 +61,8 @@ Set `EIA_API_KEY` and the ETL will pull the weekly series. If the API returns 40
 ## Reproducible Reports
 
 Reports are rendered with Jinja templates at `src/kalshi_gas/reporting/templates`. Customise visuals by editing `reporting/visuals.py` or use additional figures by returning new paths in the CLI and referencing them in the template.
+
+For daily operations and manual logging, see `docs/RUNBOOK.md`.
 
 ### Live-mode robustness
 

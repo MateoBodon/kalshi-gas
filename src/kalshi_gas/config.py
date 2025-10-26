@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -28,10 +29,18 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class EventConfig:
+    name: str
+    resolution_date: date
+    threshold: float
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     data: DataPaths
     model: ModelConfig
     risk_gates: Dict[str, Any]
+    event: EventConfig
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -58,6 +67,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "nhc_active_threshold": 1,
         # Align with competition plan: draw > 3.0 mmbbl (i.e., change <= -3.0)
         "wpsr_inventory_cutoff": -3.0,
+    },
+    "event": {
+        "name": "AAA National Average Regular > $3.10 on Oct 31, 2025",
+        "resolution_date": "2025-10-31",
+        "threshold": 3.10,
     },
 }
 
@@ -89,6 +103,25 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
     else:
         nowcast_drift_bounds = None
 
+    event_cfg = config_data.get("event", {})
+    event_name = str(event_cfg.get("name", DEFAULT_CONFIG["event"]["name"]))
+    raw_resolution = event_cfg.get(
+        "resolution_date", DEFAULT_CONFIG["event"]["resolution_date"]
+    )
+    if isinstance(raw_resolution, (datetime, date)):
+        resolution_date = (
+            raw_resolution.date()
+            if isinstance(raw_resolution, datetime)
+            else raw_resolution
+        )
+    elif isinstance(raw_resolution, str):
+        resolution_date = datetime.strptime(raw_resolution, "%Y-%m-%d").date()
+    else:
+        raise ValueError("event.resolution_date must be YYYY-MM-DD or date instance")
+    event_threshold = float(
+        event_cfg.get("threshold", DEFAULT_CONFIG["event"]["threshold"])
+    )
+
     return PipelineConfig(
         data=data_paths,
         model=ModelConfig(
@@ -99,4 +132,9 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
             nowcast_drift_bounds=nowcast_drift_bounds,
         ),
         risk_gates=risk_cfg,
+        event=EventConfig(
+            name=event_name,
+            resolution_date=resolution_date,
+            threshold=event_threshold,
+        ),
     )

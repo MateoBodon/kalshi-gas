@@ -66,6 +66,17 @@ EIA/RBOB default API series (with HTML fallbacks):
 - Gasoline stocks weekly: `PET.WGTSTUS1.W`
 - Retail weekly US regular (optional): `PET.EMM_EPMRR_PTE_NUS_DPG.W`
 
+## Offline Data Playbooks
+
+When live APIs are unavailable, stage richer offline inputs before running the pipeline:
+
+- `python scripts/bootstrap_last_good.py --overwrite` promotes curated CSVs (or the bundled samples) into `data_raw/last_good.*` snapshots so ETL runs outside of sample mode.
+- `python scripts/simulate_market_data.py` fabricates a full daily/weekly dataset up to the chosen end-date, including RBOB, EIA fundamentals, Kalshi priors, and risk-gate scaffolding.
+- `python scripts/update_wpsr_state.py --latest-change -3.6 --refinery-util 88.9 --product-supplied 8.5` refreshes the analyst WPSR overrides used for risk gating.
+- `python scripts/update_nhc_flag.py --flag --note "Invest 96L on watch"` toggles the hurricane override fed into the risk box.
+- `python scripts/log_manual_label.py --operator MB --aaa 3.112 --eia 3.115 --notes "08:45 ET"` appends a resolver observation (see `docs/RUNBOOK.md` for the twice-daily checklist).
+- `python scripts/log_prompt.py` offers an interactive prompt for the same manual log — ideal for scheduled reminders.
+
 ## Fallback & Freshness
 
 Each ETL component follows a deterministic fallback chain: live API → `data_raw/last_good.*` snapshot → bundled samples in `data/sample/`. Provenance sidecars under `data_proc/meta/` capture the current mode and as-of timestamps. Run `make check-fresh` to assert that the latest last-good snapshots meet freshness guardrails; sample mode automatically skips the check for offline runs.

@@ -15,6 +15,7 @@ from kalshi_gas.data.assemble import assemble_dataset
 from kalshi_gas.etl.pipeline import run_all_etl
 from kalshi_gas.models.ensemble import EnsembleModel
 from kalshi_gas.backtest.evaluate import compute_event_probabilities
+from kalshi_gas.utils.dataset import frame_digest
 from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 
 SWEEP_VALUES = np.arange(0.0, 1.0001, 0.05)
@@ -53,7 +54,9 @@ def _evaluate_weights(
     return frame
 
 
-def sweep_prior_weights() -> tuple[pd.DataFrame, float, float, float | None]:
+def sweep_prior_weights() -> (
+    tuple[pd.DataFrame, float, float, float | None, str | None, str | None, int]
+):
     cfg = load_config()
     run_all_etl(cfg)
     dataset = assemble_dataset(cfg)
@@ -85,7 +88,32 @@ def sweep_prior_weights() -> tuple[pd.DataFrame, float, float, float | None]:
     sweep = _evaluate_weights(SWEEP_VALUES, likelihood, outcomes, prior_probs)
     best_row = sweep.loc[sweep["log_score"].idxmax()]
     best_weight = float(best_row["prior_weight"])
-    return sweep, best_weight, event_threshold, event_probability
+    dataset_as_of = None
+    if pd.api.types.is_datetime64_any_dtype(dataset["date"]):
+        latest = dataset["date"].dropna().max()
+        if pd.notna(latest):
+            dataset_as_of = pd.Timestamp(latest).date().isoformat()
+    digest_columns = [
+        col
+        for col in (
+            "date",
+            "regular_gas_price",
+            "rbob_settle",
+            "kalshi_prob",
+            "target_future_price",
+        )
+        if col in dataset.columns
+    ]
+    dataset_fingerprint = frame_digest(dataset, columns=digest_columns)
+    return (
+        sweep,
+        best_weight,
+        event_threshold,
+        event_probability,
+        dataset_as_of,
+        dataset_fingerprint,
+        len(dataset),
+    )
 
 
 def write_outputs(
@@ -93,6 +121,9 @@ def write_outputs(
     best_weight: float,
     event_threshold: float,
     event_probability: float | None,
+    dataset_as_of: str | None,
+    dataset_digest: str | None,
+    dataset_rows: int,
 ) -> None:
     data_proc = Path("data_proc")
     data_proc.mkdir(parents=True, exist_ok=True)
@@ -104,6 +135,9 @@ def write_outputs(
         "best_weight": best_weight,
         "generated_at": sweep_path.stat().st_mtime,
         "event_threshold": event_threshold,
+        "dataset_as_of": dataset_as_of,
+        "dataset_digest": dataset_digest,
+        "dataset_rows": dataset_rows,
     }
     if event_probability is not None:
         payload["central_probability"] = event_probability
@@ -126,13 +160,31 @@ def write_outputs(
 
 
 def main() -> None:
-    sweep, best_weight, event_threshold, event_probability = sweep_prior_weights()
-    write_outputs(sweep, best_weight, event_threshold, event_probability)
+    (
+        sweep,
+        best_weight,
+        event_threshold,
+        event_probability,
+        dataset_as_of,
+        dataset_digest,
+        dataset_rows,
+    ) = sweep_prior_weights()
+    write_outputs(
+        sweep,
+        best_weight,
+        event_threshold,
+        event_probability,
+        dataset_as_of,
+        dataset_digest,
+        dataset_rows,
+    )
     print(
         json.dumps(
             {
                 "best_weight": best_weight,
                 "event_threshold": event_threshold,
+                "dataset_as_of": dataset_as_of,
+                "dataset_rows": dataset_rows,
             },
             indent=2,
         )

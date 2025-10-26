@@ -7,12 +7,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 from kalshi_gas.config import PipelineConfig
 from kalshi_gas.etl.base import DataProvenance, ETLTask, ExtractorResult
 from kalshi_gas.etl.utils import (
     CSVLoader,
-    fetch_json,
     freshness_age_hours,
     get_source,
     infer_as_of,
@@ -24,7 +24,9 @@ from kalshi_gas.etl.utils import (
     utcnow_iso,
 )
 
-EIA_RBOB_SERIES = "PET.RBRTWD.W"  # Reformulated gasoline spot price, $/gallon
+EIA_RBOB_SERIES = "PET.RBRTWD.W"  # retained for provenance metadata
+# NY Harbor conventional gasoline spot price (weekly, $/gal)
+EIA_RBOB_SERIES_V2 = "EER_EPMRU_PF4_Y35NY_DPG"
 
 log = logging.getLogger(__name__)
 
@@ -48,15 +50,32 @@ class RBOBExtractor:
         if not api_key:
             raise RuntimeError("EIA_API_KEY not configured")
 
-        url = (
-            f"https://api.eia.gov/series/?api_key={api_key}&series_id={self.series_id}"
+        params = {
+            "api_key": api_key,
+            "frequency": "weekly",
+            "data[0]": "value",
+            "facets[series][]": EIA_RBOB_SERIES_V2,
+            "length": 5000,
+        }
+        response = requests.get(
+            "https://api.eia.gov/v2/petroleum/pri/spt/data/",
+            params=params,
+            timeout=30,
         )
-        payload = fetch_json(url)
-        series_meta = payload["series"][0]
-        frame = pd.DataFrame(series_meta["data"], columns=["period", "settle"])
+        response.raise_for_status()
+        payload = response.json()
+        entries = payload.get("response", {}).get("data", [])
+        if not entries:
+            raise RuntimeError(
+                "EIA v2 returned no spot price data for the configured series"
+            )
+
+        frame = pd.DataFrame(entries)
+        if "period" not in frame or "value" not in frame:
+            raise RuntimeError("Unexpected EIA spot price payload structure")
         frame["date"] = pd.to_datetime(frame["period"])
-        frame["settle"] = frame["settle"].astype(float)
-        frame.drop(columns=["period"], inplace=True)
+        frame["settle"] = frame["value"].astype(float)
+        frame = frame[["date", "settle"]]
         return frame
 
     def extract(self) -> ExtractorResult:
@@ -172,7 +191,15 @@ class RBOBTransformer:
     def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
         frame = frame.copy()
         frame["settle"] = frame["settle"].astype(float)
-        frame = frame.dropna(subset=["date", "settle"])
+        optional_cols = {
+            "second_month": "rbob_second",
+            "spread": "rbob_spread",
+            "settle_change": "rbob_settle_change",
+            "second_change": "rbob_second_change",
+        }
+        for source_col, target_col in optional_cols.items():
+            if source_col in frame:
+                frame[target_col] = pd.to_numeric(frame[source_col], errors="coerce")
         frame.sort_values("date", inplace=True)
         frame["settle"] = frame["settle"].round(4)
         frame.rename(columns={"settle": "rbob_price"}, inplace=True)

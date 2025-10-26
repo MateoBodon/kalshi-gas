@@ -24,11 +24,16 @@ Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]
 {% else %}
 - Tail adjustments: none
 {% endif %}
+{% if risk_context and risk_context.get("prior_weight_note") %}
+- Prior weight calibration: {{ risk_context["prior_weight_note"] }}
+{% endif %}
 
 {% if risk_context %}
 {% set wpsr = risk_context.get("wpsr", {}) %}
 {% set nhc = risk_context.get("nhc", {}) %}
+{% set event_ctx = risk_context.get("event", {}) %}
 {% set adjustments = risk_context.get("adjustments", []) %}
+{% set dataset_ctx = risk_context.get("dataset", {}) %}
 
 ### Risk Metrics
 | Metric | Value | Trigger |
@@ -37,11 +42,14 @@ Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]
 | Refinery utilisation (%) | {{ "%.1f"|format(wpsr.get("refinery_util_pct", 0.0)) }} | < {{ "%.1f"|format(wpsr.get("util_trigger", 90.0)) }} |
 | NHC active storms | {{ nhc.get("active_storms", 0) }} | ≥ {{ nhc.get("threshold", 1) }} |
 | Analyst override | {{ "ON" if nhc.get("analyst_flag") else "OFF" }} | Manual |
+| Event date | {{ event_ctx.get("resolution_date", "n/a") }} | — |
+| Event threshold (USD/gal) | {{ "%.2f"|format(event_ctx.get("threshold", 0.0)) }} | — |
 {% if adjustments %}
 | Tail adjustments | {{ adjustments[0] }}{% for note in adjustments[1:] %}; {{ note }}{% endfor %} | — |
 {% else %}
 | Tail adjustments | none | — |
 {% endif %}
+| Dataset as_of | {{ dataset_ctx.get("as_of", "n/a") }} | — |
 {% endif %}
 
 ![Risk Box]({{ figures.risk_box }})
@@ -109,6 +117,9 @@ _{{ figure_footer }}_
 {% for key, value in posterior.items() if key.startswith("prob_ge_") -%}
 - {{ key }}: {{ "%.4f"|format(value) }}
 {% endfor %}
+{% if posterior.dataset_digest %}
+- Dataset digest: {{ posterior.dataset_digest }}
+{% endif %}
 
 {% if risk_context %}
 {% set alpha_note = risk_context.get('alpha_note') %}

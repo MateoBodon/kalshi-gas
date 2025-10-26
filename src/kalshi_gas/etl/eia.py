@@ -6,16 +6,15 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 from bs4 import BeautifulSoup, Tag
+import requests
 
 from kalshi_gas.config import PipelineConfig
 from kalshi_gas.etl.base import DataProvenance, ETLTask, ExtractorResult
 from kalshi_gas.etl.utils import (
     CSVLoader,
-    fetch_json,
     freshness_age_hours,
     get_source,
     infer_as_of,
@@ -56,17 +55,28 @@ class EIAExtractor:
         if not api_key:
             raise RuntimeError("EIA_API_KEY not configured")
 
-        url = f"{EIA_BASE_URL}?api_key={api_key}&series_id={self.series_id}"
-        payload = fetch_json(url)
-        series_meta: Dict[str, object] = payload["series"][0]
-        frame = pd.DataFrame(series_meta["data"], columns=["period", "inventory"])
+        url = f"https://api.eia.gov/v2/seriesid/{self.series_id}"
+        params = {
+            "api_key": api_key,
+            "offset": 0,
+            "length": 5000,
+        }
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+        series_data = payload.get("response", {}).get("data", [])
+        if not series_data:
+            raise RuntimeError(f"EIA series {self.series_id} returned no data")
+
+        frame = pd.DataFrame(series_data)
+        if "period" not in frame or "value" not in frame:
+            raise RuntimeError("Unexpected EIA payload structure for inventory series")
         frame["date"] = pd.to_datetime(frame["period"])
-        frame["inventory_mmbbl"] = frame["inventory"].astype(float) / 1000.0
-        frame.drop(columns=["period", "inventory"], inplace=True)
+        frame["inventory_mmbbl"] = frame["value"].astype(float) / 1000.0
+        frame["production_mbd"] = pd.NA
+        frame = frame[["date", "inventory_mmbbl", "production_mbd"]]
         frame.sort_values("date", inplace=True)
         frame.reset_index(drop=True, inplace=True)
-        if "production_mbd" not in frame:
-            frame["production_mbd"] = pd.NA
         return frame
 
     def extract(self) -> ExtractorResult:

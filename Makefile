@@ -1,6 +1,7 @@
 PYTHON ?= python3
 
 .PHONY: install lint test report deck models figures clean check-fresh calibrate freeze-backtest sweep-ensemble update-kalshi-bins report-live pull-eia-html pull-wpsr-html live-check
+.PHONY: log-prompt log-entry daily-run
 
 install:
 	$(PYTHON) -m pip install -e .[dev]
@@ -55,3 +56,11 @@ pull-eia-html:
 
 live-check:
 	$(PYTHON) scripts/live_check.py
+
+log-prompt:
+	$(PYTHON) scripts/log_prompt.py
+
+log-entry:
+	$(PYTHON) scripts/log_manual_label.py --operator $(OP) --aaa $(AAA) --eia $(EIA) --gasbuddy $(GB) --notes $(NOTES)
+
+daily-run: log-prompt report calibrate
