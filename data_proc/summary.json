@@ -9,7 +9,10 @@
   "days_to_event": 1,
   "beta_eff": 0.0,
   "alpha_lift_applied": 0.0,
-  "residual_sigma": 0.009770719719335002,
+  "residual_sigma": 0.009863158586662922,
+  "p_gt_300": 0.9988234640076936,
+  "p_gt_305": 0.02129298749701325,
+  "p_gt_310": 6.369349492274523e-13,
   "tplus1_sensitivity": [
     {
       "scenario": "RBOB +$0.05",

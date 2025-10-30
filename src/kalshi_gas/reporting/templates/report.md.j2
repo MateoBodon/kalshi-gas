@@ -164,6 +164,31 @@ _{{ figure_footer }}_
 ![AAA Daily Δ Histogram]({{ figures.delta_hist }})
 _{{ figure_footer }}_
 
+{% if figures.get('aaa_last60') %}
+![AAA — last 60 days]({{ figures.get('aaa_last60') }})
+_{{ figure_footer }}_
+{% endif %}
+
+{% if figures.get('threshold_scurve') %}
+![Probability vs threshold (same mean & σ)]({{ figures.get('threshold_scurve') }})
+_{{ figure_footer }}_
+{% endif %}
+
+{% if figures.get('aaa_vs_eia') %}
+![AAA vs EIA weekly (last 12 weeks)]({{ figures.get('aaa_vs_eia') }})
+_{{ figure_footer }}_
+{% endif %}
+
+#### Adjacent thresholds (same freeze)
+| Threshold | Probability |
+| --- | --- |
+{% set value = freeze_metrics.get('p_gt_300') %}
+| P(>3.00) | {% if value is none or value != value %}n/a{% else %}{% set pct = value * 100 %}{% if pct < 0.10 %}<0.10%{% else %}{{ "%.2f"|format(pct) }}%{% endif %}{% endif %} |
+{% set value = freeze_metrics.get('p_gt_305') %}
+| P(>3.05) | {% if value is none or value != value %}n/a{% else %}{% set pct = value * 100 %}{% if pct < 0.10 %}<0.10%{% else %}{{ "%.2f"|format(pct) }}%{% endif %}{% endif %} |
+{% set value = freeze_metrics.get('p_gt_310') %}
+| P(>3.10) | {% if value is none or value != value %}n/a{% else %}{% set pct = value * 100 %}{% if pct < 0.10 %}<0.10%{% else %}{{ "%.2f"|format(pct) }}%{% endif %}{% endif %} |
+
 {% set horizon_threshold = posterior.final_threshold or posterior.event_threshold %}
 {% if tplus1_sensitivity %}
 _Horizon-aware T+1 adjustments:_

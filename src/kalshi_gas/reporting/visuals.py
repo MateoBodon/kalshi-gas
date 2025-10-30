@@ -8,9 +8,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-
-sns.set_theme(style="whitegrid")
+from matplotlib.ticker import FuncFormatter
 
 
 def _footer_text(as_of: str | None, source: str | None) -> str | None:
@@ -36,6 +34,245 @@ def _draw_footer(fig, as_of: str | None, source: str | None) -> None:
             fontsize=8,
             color="#555555",
         )
+
+
+def apply_theme() -> None:
+    """Apply a consistent matplotlib theme across report visuals."""
+
+    plt.rcParams.update(
+        {
+            "figure.dpi": 120,
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "axes.grid": True,
+            "axes.grid.which": "major",
+            "grid.alpha": 0.25,
+            "axes.edgecolor": "#CCCCCC",
+            "axes.titlesize": 12,
+            "axes.labelsize": 10,
+            "xtick.labelsize": 9,
+            "ytick.labelsize": 9,
+            "legend.fontsize": 9,
+            "lines.linewidth": 1.8,
+            "lines.markersize": 4,
+        }
+    )
+
+
+def plot_aaa_rolling_line(
+    ax,
+    df: pd.DataFrame | None,
+    *,
+    days: int = 60,
+    threshold: float | None = None,
+    as_of: str | None = None,
+) -> None:
+    """Plot AAA daily price over the recent window with optional threshold line."""
+
+    ax.set_title(f"AAA price – last {days} days")
+    ax.set_ylabel("USD per gallon")
+    ax.set_xlabel("Date")
+
+    if df is None or df.empty or "regular_gas_price" not in df.columns:
+        ax.text(0.5, 0.5, "AAA history unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily (USD/gal)")
+        return
+
+    frame = df.copy()
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame.dropna(subset=["date", "regular_gas_price"])
+    if frame.empty:
+        ax.text(0.5, 0.5, "AAA history unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily (USD/gal)")
+        return
+
+    latest_date = frame["date"].max()
+    if pd.isna(latest_date):
+        ax.text(0.5, 0.5, "AAA history unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily (USD/gal)")
+        return
+
+    start_date = latest_date - pd.Timedelta(days=days)
+    window = frame[frame["date"] >= start_date]
+    if window.empty:
+        window = frame
+
+    ax.plot(window["date"], window["regular_gas_price"], color="#1f77b4")
+    if threshold is not None:
+        ax.axhline(
+            threshold,
+            linestyle="--",
+            color="#d62728",
+            linewidth=1.2,
+            label=f"${threshold:.2f} threshold",
+        )
+        ax.legend()
+    ax.figure.autofmt_xdate()
+    _draw_footer(ax.figure, as_of, "AAA daily (USD/gal)")
+
+
+def plot_threshold_scurve(
+    ax,
+    *,
+    mean: float,
+    sigma: float,
+    thresholds: tuple[float, ...] = (3.00, 3.05, 3.10),
+    as_of: str | None = None,
+) -> None:
+    """Plot Gaussian tail probability vs threshold using the freeze mean and sigma."""
+
+    ax.set_title("Probability vs threshold (Gaussian tail)")
+    ax.set_xlabel("Threshold (USD/gal)")
+    ax.set_ylabel("P(AAA > threshold)")
+
+    if not np.isfinite(mean) or not np.isfinite(sigma) or sigma < 0:
+        ax.text(0.5, 0.5, "Invalid mean/σ", ha="center", va="center")
+        ax.grid(False)
+        _draw_footer(ax.figure, as_of, "Mean & σ from freeze")
+        return
+
+    if not thresholds:
+        thresholds = (mean,)
+
+    span_low = min(thresholds + (mean,)) - 0.10
+    span_high = max(thresholds + (mean,)) + 0.10
+    x = np.linspace(span_low, span_high, 256)
+
+    if sigma <= 0:
+        tail_curve = np.where(x < mean, 1.0, 0.0)
+        marker_probs = [1.0 if thresh < mean else 0.0 for thresh in thresholds]
+    else:
+        scale = sigma * math.sqrt(2.0)
+        tail_curve = np.array(
+            [0.5 * (1 - math.erf((value - mean) / scale)) for value in x]
+        )
+        marker_probs = [
+            0.5 * (1 - math.erf((thresh - mean) / scale)) for thresh in thresholds
+        ]
+
+    ax.plot(x, tail_curve, color="#1f77b4")
+    ax.set_ylim(0, 1)
+    ax.set_xlim(min(x), max(x))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v * 100:.0f}%"))
+
+    ax.scatter(thresholds, marker_probs, color="#d62728", zorder=3)
+    for thresh, prob in zip(thresholds, marker_probs, strict=True):
+        ax.annotate(
+            f"{prob * 100:.2f}%",
+            (thresh, prob),
+            textcoords="offset points",
+            xytext=(0, -12),
+            ha="center",
+            fontsize=8,
+            color="#d62728",
+        )
+
+    _draw_footer(ax.figure, as_of, "Mean & σ from freeze")
+
+
+def plot_aaa_vs_eia(
+    ax,
+    aaa_df: pd.DataFrame | None,
+    eia_df: pd.DataFrame | None,
+    *,
+    weeks: int = 12,
+    as_of: str | None = None,
+) -> None:
+    """Overlay AAA daily price with EIA weekly stocks over the recent window."""
+
+    has_aaa = (
+        aaa_df is not None
+        and not aaa_df.empty
+        and "regular_gas_price" in aaa_df.columns
+    )
+    has_eia = (
+        eia_df is not None and not eia_df.empty and "inventory_mmbbl" in eia_df.columns
+    )
+
+    if not has_aaa or not has_eia:
+        ax.text(0.5, 0.5, "AAA or EIA series unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily • EIA WPSR weekly")
+        return
+
+    aaa = aaa_df.copy()
+    aaa["date"] = pd.to_datetime(aaa["date"])
+    aaa = aaa.dropna(subset=["date", "regular_gas_price"])
+    if aaa.empty:
+        ax.text(0.5, 0.5, "AAA series unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily • EIA WPSR weekly")
+        return
+
+    eia = eia_df.copy()
+    if "date" not in eia.columns:
+        ax.text(0.5, 0.5, "EIA series unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily • EIA WPSR weekly")
+        return
+    eia["date"] = pd.to_datetime(eia["date"])
+    eia = eia.dropna(subset=["date", "inventory_mmbbl"])
+    if eia.empty:
+        ax.text(0.5, 0.5, "EIA series unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily • EIA WPSR weekly")
+        return
+
+    end_date = max(aaa["date"].max(), eia["date"].max())
+    if pd.isna(end_date):
+        ax.text(0.5, 0.5, "Data unavailable", ha="center", va="center")
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        _draw_footer(ax.figure, as_of, "AAA daily • EIA WPSR weekly")
+        return
+
+    start_date = end_date - pd.DateOffset(weeks=weeks)
+    aaa_recent = aaa[aaa["date"] >= start_date]
+    eia_recent = eia[eia["date"] >= start_date]
+
+    ax.set_title(f"AAA vs EIA stocks – last {weeks} weeks")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("AAA price (USD/gal)")
+    ax.plot(
+        aaa_recent["date"],
+        aaa_recent["regular_gas_price"],
+        color="#1f77b4",
+        label="AAA price",
+    )
+
+    ax2 = ax.twinx()
+    ax2.set_ylabel("EIA stocks (mmbbl)")
+    ax2.plot(
+        eia_recent["date"],
+        eia_recent["inventory_mmbbl"],
+        color="#ff7f0e",
+        linestyle="--",
+        marker="o",
+        label="EIA gasoline stocks",
+    )
+
+    ax.figure.autofmt_xdate()
+    ax.legend(loc="upper left")
+    ax2.legend(loc="upper right")
+    _draw_footer(ax.figure, as_of, "AAA daily • EIA WPSR weekly")
 
 
 def plot_price_forecast(
@@ -376,7 +613,14 @@ def plot_posterior_density(
     """Plot posterior sample density with event threshold marker."""
     draws = np.asarray(samples, dtype=float)
     fig, ax = plt.subplots(figsize=(6, 4))
-    sns.kdeplot(draws, ax=ax, fill=True, alpha=0.5, color="#2ca02c")
+    ax.hist(
+        draws,
+        bins=60,
+        density=True,
+        alpha=0.45,
+        color="#2ca02c",
+        label="Posterior samples",
+    )
     ax.set_xlabel("Price (USD/gal)")
     ax.set_ylabel("Density")
     ax.set_title("Posterior Density")

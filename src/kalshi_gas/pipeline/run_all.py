@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -28,11 +30,15 @@ from kalshi_gas.models.posterior import PosteriorDistribution, compute_sensitivi
 from kalshi_gas.models.prior import MarketPriorCDF
 from kalshi_gas.reporting.report_builder import ReportBuilder
 from kalshi_gas.reporting.visuals import (
+    apply_theme,
+    plot_aaa_rolling_line,
     plot_calibration,
     plot_aaa_delta_histogram,
+    plot_aaa_vs_eia,
     plot_price_forecast,
     plot_risk_box,
     plot_sensitivity_bars,
+    plot_threshold_scurve,
 )
 from kalshi_gas.risk.gates import evaluate_risk
 from kalshi_gas.utils.dataset import frame_digest
@@ -918,6 +924,21 @@ def run_pipeline(
             "wti_proxy": None,
         }
 
+    adjacent_thresholds = (3.00, 3.05, 3.10)
+    if nowcast_mean is None or not np.isfinite(nowcast_mean):
+        tail_lookup = {thr: float("nan") for thr in adjacent_thresholds}
+    elif not np.isfinite(residual_sigma) or residual_sigma <= 0:
+        tail_lookup = {
+            thr: 1.0 if float(nowcast_mean) > thr else 0.0
+            for thr in adjacent_thresholds
+        }
+    else:
+        scale = float(residual_sigma) * math.sqrt(2.0)
+        tail_lookup = {
+            thr: 0.5 * (1 - math.erf((thr - float(nowcast_mean)) / scale))
+            for thr in adjacent_thresholds
+        }
+
     freeze_metrics.update(
         {
             "alpha_lift": float(alpha_lift_applied),
@@ -927,6 +948,9 @@ def run_pipeline(
             "residual_sigma": float(residual_sigma),
             "point_forecast": float(posterior_summary.get("mean", nowcast_mean)),
             "tail_probability": float(base_prob_event),
+            "p_gt_300": float(tail_lookup.get(3.00, float("nan"))),
+            "p_gt_305": float(tail_lookup.get(3.05, float("nan"))),
+            "p_gt_310": float(tail_lookup.get(3.10, float("nan"))),
         }
     )
     risk_context["freeze_metrics"] = freeze_metrics
@@ -944,6 +968,9 @@ def run_pipeline(
         "beta_eff": beta_eff,
         "alpha_lift_applied": alpha_lift_applied,
         "residual_sigma": residual_sigma,
+        "p_gt_300": tail_lookup.get(3.00),
+        "p_gt_305": tail_lookup.get(3.05),
+        "p_gt_310": tail_lookup.get(3.10),
     }
     summary_payload["tplus1_sensitivity"] = horizon_scenarios
     (Path("data_proc") / "summary.json").write_text(
@@ -1034,6 +1061,83 @@ def run_pipeline(
     memo_dir = cfg.data.build_dir / "memo"
     figures_dir.mkdir(parents=True, exist_ok=True)
     memo_dir.mkdir(parents=True, exist_ok=True)
+
+    apply_theme()
+
+    aaa_last60_fig: Path | None = None
+    threshold_scurve_fig: Path | None = None
+    aaa_vs_eia_fig: Path | None = None
+
+    eia_processed_df: pd.DataFrame | None = None
+    eia_processed_path = cfg.data.processed_dir / "eia_weekly.csv"
+    if eia_processed_path.exists():
+        try:
+            eia_processed_df = pd.read_csv(eia_processed_path, parse_dates=["date"])
+        except Exception:
+            eia_processed_df = None
+
+    mean_for_plot = float(nowcast_mean) if nowcast_mean is not None else float("nan")
+    sigma_for_plot = (
+        float(residual_sigma) if residual_sigma is not None else float("nan")
+    )
+
+    fig = None
+    try:
+        fig, ax = plt.subplots(figsize=(6.5, 3.2))
+        plot_aaa_rolling_line(
+            ax,
+            price_history,
+            days=60,
+            threshold=event_threshold,
+            as_of=dataset_as_of,
+        )
+        fig.tight_layout(rect=(0, 0.06, 1, 1))
+        aaa_last60_fig = figures_dir / "aaa_last60.png"
+        fig.savefig(aaa_last60_fig, bbox_inches="tight")
+    except Exception:
+        aaa_last60_fig = None
+    finally:
+        if fig is not None:
+            plt.close(fig)
+
+    fig = None
+    try:
+        fig, ax = plt.subplots(figsize=(6.5, 3.2))
+        plot_threshold_scurve(
+            ax,
+            mean=mean_for_plot,
+            sigma=sigma_for_plot,
+            thresholds=adjacent_thresholds,
+            as_of=dataset_as_of,
+        )
+        fig.tight_layout(rect=(0, 0.06, 1, 1))
+        threshold_scurve_fig = figures_dir / "threshold_scurve.png"
+        fig.savefig(threshold_scurve_fig, bbox_inches="tight")
+    except Exception:
+        threshold_scurve_fig = None
+    finally:
+        if fig is not None:
+            plt.close(fig)
+
+    if eia_processed_df is not None:
+        fig = None
+        try:
+            fig, ax = plt.subplots(figsize=(6.5, 3.2))
+            plot_aaa_vs_eia(
+                ax,
+                price_history,
+                eia_processed_df,
+                weeks=12,
+                as_of=dataset_as_of,
+            )
+            fig.tight_layout(rect=(0, 0.06, 1, 1))
+            aaa_vs_eia_fig = figures_dir / "aaa_vs_eia.png"
+            fig.savefig(aaa_vs_eia_fig, bbox_inches="tight")
+        except Exception:
+            aaa_vs_eia_fig = None
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
     model_source = "Kalshi Gas ensemble model"
     data_source = source_summary or "Kalshi Gas data sources"
@@ -1187,19 +1291,26 @@ def run_pipeline(
 
     builder = ReportBuilder()
     report_path = memo_dir / "report.md"
+    figure_map: dict[str, Path] = {
+        "forecast": forecast_fig,
+        "calibration": calibration_fig,
+        "fundamentals": fundamentals_fig,
+        "risk_box": risk_box_fig,
+        "sensitivity": sensitivity_fig,
+        "delta_hist": delta_hist_fig,
+        "pass_through": structural_fig,
+        "prior_cdf": prior_cdf_fig,
+        "posterior": posterior_fig,
+    }
+    if aaa_last60_fig is not None:
+        figure_map["aaa_last60"] = aaa_last60_fig
+    if threshold_scurve_fig is not None:
+        figure_map["threshold_scurve"] = threshold_scurve_fig
+    if aaa_vs_eia_fig is not None:
+        figure_map["aaa_vs_eia"] = aaa_vs_eia_fig
+
     figures_relative = {
-        key: Path("..") / "figures" / value.name
-        for key, value in {
-            "forecast": forecast_fig,
-            "calibration": calibration_fig,
-            "fundamentals": fundamentals_fig,
-            "risk_box": risk_box_fig,
-            "sensitivity": sensitivity_fig,
-            "delta_hist": delta_hist_fig,
-            "pass_through": structural_fig,
-            "prior_cdf": prior_cdf_fig,
-            "posterior": posterior_fig,
-        }.items()
+        key: Path("..") / "figures" / value.name for key, value in figure_map.items()
     }
     builder.build(
         metrics=backtest.metrics,
@@ -1234,10 +1345,17 @@ def run_pipeline(
         fundamentals_fig,
         risk_box_fig,
         sensitivity_fig,
+        delta_hist_fig,
         structural_fig,
         prior_cdf_fig,
         posterior_fig,
     }
+    if aaa_last60_fig is not None:
+        figure_exports.add(aaa_last60_fig)
+    if threshold_scurve_fig is not None:
+        figure_exports.add(threshold_scurve_fig)
+    if aaa_vs_eia_fig is not None:
+        figure_exports.add(aaa_vs_eia_fig)
     for path in figure_exports:
         try:
             shutil.copy2(path, reports_figures_dir / path.name)
