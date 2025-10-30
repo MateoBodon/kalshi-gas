@@ -453,11 +453,27 @@ class AAAExtractor:
 class AAATransformer:
     def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
         frame = frame.copy()
-        frame["regular_gas_price"] = frame["regular_gas_price"].astype(float)
-        frame = frame.dropna(subset=["date", "regular_gas_price"])
-        frame = frame.sort_values("date")
-        frame["regular_gas_price"] = frame["regular_gas_price"].round(3)
-        return frame.reset_index(drop=True)
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        frame["regular_gas_price"] = pd.to_numeric(
+            frame["regular_gas_price"], errors="coerce"
+        )
+
+        history_path = Path("data_raw/last_good.aaa.csv")
+        if history_path.exists():
+            history = pd.read_csv(history_path, parse_dates=["date"])
+            history["regular_gas_price"] = pd.to_numeric(
+                history["regular_gas_price"], errors="coerce"
+            )
+            combined = pd.concat([history, frame], ignore_index=True)
+        else:
+            combined = frame
+
+        combined = combined.dropna(subset=["date", "regular_gas_price"])
+        combined = combined.drop_duplicates(subset=["date"], keep="last")
+        combined = combined.sort_values("date")
+        combined["regular_gas_price"] = combined["regular_gas_price"].round(3)
+        combined["date"] = combined["date"].dt.date
+        return combined.reset_index(drop=True)
 
 
 def build_aaa_etl(config: PipelineConfig) -> ETLTask:

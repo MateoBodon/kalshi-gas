@@ -385,15 +385,34 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
         asymmetry_ci = None
 
     # Add optional alpha_t memo note now that alpha_series is computed
+    alpha_dynamic_offset = 0.0
+    alpha_latest = None
+    alpha_mean = None
     if alpha_series is not None and hasattr(alpha_series, "dropna"):
         try:
-            last_alpha = float(alpha_series.dropna().iloc[-1])
-            alpha_mean = float(alpha_series.dropna().tail(26).mean())
-            risk_context["alpha_note"] = (
-                f"latest α_t={last_alpha:.2f}; 26w mean α_t={alpha_mean:.2f}"
-            )
+            alpha_clean = alpha_series.dropna()
+            if not alpha_clean.empty:
+                alpha_latest = float(alpha_clean.iloc[-1])
+                alpha_mean = float(alpha_clean.tail(26).mean())
+                base_alpha = float(structural.get("alpha", 0.0) or 0.0)
+                alpha_dynamic_offset = float(
+                    np.clip(alpha_latest - base_alpha, -0.25, 0.25)
+                )
+                risk_context["alpha_note"] = (
+                    f"latest α_t={alpha_latest:.2f}; 26w mean α_t={alpha_mean:.2f}"
+                )
         except Exception:  # noqa: BLE001
-            pass
+            alpha_latest = None
+            alpha_mean = None
+            alpha_dynamic_offset = 0.0
+
+    if alpha_mean is not None and "alpha_note" not in risk_context:
+        risk_context["alpha_note"] = f"26w mean α_t={alpha_mean:.2f}"
+
+    if alpha_latest is not None:
+        risk_flags.setdefault("alpha", {})["latest"] = alpha_latest
+    if alpha_mean is not None:
+        risk_flags.setdefault("alpha", {})["mean_26w"] = alpha_mean
 
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     if central_probability is None:
@@ -411,7 +430,13 @@ def run_pipeline(config_path: str | None = None) -> Dict[str, object]:
             beta_up_scale=beta_up_scale,
             beta_dn_scale=beta_dn_scale,
         )
-        adjusted = base_samples + alpha_shift + alpha_delta + beta_effect * rbob_delta
+        adjusted = (
+            base_samples
+            + alpha_shift
+            + alpha_dynamic_offset
+            + alpha_delta
+            + beta_effect * rbob_delta
+        )
         # Clip to a tighter plausible retail range to reduce CRPS
         adjusted_samples = np.clip(adjusted, 2.60, 4.40)
         return PosteriorDistribution(

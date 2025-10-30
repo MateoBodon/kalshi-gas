@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+import subprocess
 from pathlib import Path
 from typing import Dict
 
@@ -22,6 +23,19 @@ class ReportBuilder:
             trim_blocks=True,
             lstrip_blocks=True,
         )
+
+    @staticmethod
+    def _git_sha() -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout.strip()
+        except Exception:  # noqa: BLE001
+            return None
 
     def build(
         self,
@@ -58,6 +72,7 @@ class ReportBuilder:
         figure_footer = (
             f"As of {as_of_label} • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)"
         )
+        submission_sha = self._git_sha()
         content = template.render(
             metrics=metrics_table,
             risk=risk,
@@ -75,7 +90,12 @@ class ReportBuilder:
             figures=figures,
             figure_footer=figure_footer,
             as_of_label=as_of_label,
-            metadata={"generated_at": datetime.utcnow().isoformat()},
+            metadata={
+                "generated_at": datetime.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+            },
+            submission_sha=submission_sha,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
@@ -99,8 +119,13 @@ class ReportBuilder:
     ) -> Path:
         template = self.env.get_template("deck.md.j2")
         figures = {key: str(value) for key, value in figures.items()}
+        submission_sha = self._git_sha()
         content = template.render(
-            metadata={"generated_at": datetime.utcnow().isoformat()},
+            metadata={
+                "generated_at": datetime.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+            },
             posterior=posterior,
             risk_flags=risk_flags,
             risk_context=risk_context or {},
@@ -113,6 +138,7 @@ class ReportBuilder:
             headline_date=headline_date,
             asymmetry_ci=asymmetry_ci,
             jackknife=jackknife,
+            submission_sha=submission_sha,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")

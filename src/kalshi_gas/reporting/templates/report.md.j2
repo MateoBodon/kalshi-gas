@@ -149,3 +149,8 @@ _{{ figure_footer }}_
 {% for path in meta_files -%}
 - {{ path }}
 {% endfor %}
+{% if submission_sha %}
+- Submission SHA: {{ submission_sha }}
+{% else %}
+- Submission SHA: _(run `git rev-parse HEAD` at final freeze and paste here)_
+{% endif %}

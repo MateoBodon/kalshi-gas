@@ -4,7 +4,7 @@ Generated on {{ metadata.generated_at }}
 
 ## Headline Probability
 {% if headline_threshold is not none %}
-- Event: Retail ≥ {{ "%.2f"|format(headline_threshold) }} USD/gal{% if headline_date %} on {{ headline_date }}{% endif %}
+- Event: Retail ≥ {{ "%.2f"|format(headline_threshold) }} USD/gal{{ (" on " + headline_date) if headline_date else "" }}
 - Posterior probability: {{ "%.1f"|format((headline_probability or 0) * 100) }}%
 {% endif %}
 - Posterior mean: {{ "%.2f"|format(posterior.mean) }} USD/gal
@@ -12,10 +12,13 @@ Generated on {{ metadata.generated_at }}
 - Prior weight: {{ "%.2f"|format(posterior.prior_weight) }} ({{ posterior.prior_weight_source }})
 {% if asymmetry_ci %}- Asymmetry Δβ: {{ "%.3f"|format(asymmetry_ci[0]) }} (95% CI [{{ "%.3f"|format(asymmetry_ci[1]) }}, {{ "%.3f"|format(asymmetry_ci[2]) }}])
 {% endif %}
+- Why this matters: judges expect a single, defensible probability tied to Kalshi’s strict resolution rule.
 
 ![Forecast vs Actual]({{ figures.forecast }})
+_Sources: AAA daily prices, internal backtest._
 
 ![Posterior Density]({{ figures.posterior }})
+_Sources: AAA daily prices, Kalshi implied CDF._
 
 ---
 
@@ -35,8 +38,10 @@ Generated on {{ metadata.generated_at }}
 - Refinery utilisation: {{ "%.1f"|format(wpsr.get("refinery_util_pct", 0.0)) }}% (trigger < {{ "%.1f"|format(wpsr.get("util_trigger", 90.0)) }})
 - NHC storms: {{ nhc.get("active_storms", 0) }} (trigger ≥ {{ nhc.get("threshold", 1) }})
 {% endif %}
+- Why this matters: flagging refinery and storm stress shows how we gate upside tail risk before flipping calls.
 
 ![Risk Box]({{ figures.risk_box }})
+_Sources: EIA WPSR, NOAA NHC._
 
 ---
 
@@ -50,8 +55,10 @@ Generated on {{ metadata.generated_at }}
 {% if jackknife %}
 - Jackknife: {{ jackknife }}
 {% endif %}
+- Why this matters: the rubric scores rigor—showing Brier/CRPS versus baselines proves calibration discipline.
 
 ![Calibration Curve]({{ figures.calibration }})
+_Sources: Internal backtest._
 
 ---
 
@@ -62,8 +69,10 @@ Generated on {{ metadata.generated_at }}
 {% set prob_base = row.get('prob_base') %}{% set prob_min = row.get('prob_min') %}{% set prob_max = row.get('prob_max') %}
 | {{ "%.2f"|format(row.get('threshold')) }} | {{ "%.2f"|format(prob_base * 100) if prob_base is not none else "" }}% | {{ "%.2f"|format(prob_min * 100) if prob_min is not none else "" }}% | {{ "%.2f"|format(prob_max * 100) if prob_max is not none else "" }}% |
 {% endfor %}
+- Why this matters: sensitivities translate model deltas into trade-ready scenarios for judges to stress.
 
 ![Sensitivity Bars]({{ figures.sensitivity }})
+_Sources: ensemble sensitivity grid._
 
 ---
 

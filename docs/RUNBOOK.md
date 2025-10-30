@@ -72,3 +72,22 @@ adjust for your local timezone):
 ```
 
 The helper will prompt for prices and write them to `data_raw/manual_logs.csv` with a full audit trail.
+
+## Final Submission Checklist (Oct 28 – Oct 30, 2025)
+
+**Oct 28 (Tue) — Data refresh & calibration**
+- Pull latest AAA national (AM/PM), append to `data_raw/last_good.aaa.csv`, rerun `make report`.
+- Update Kalshi bins via `python scripts/update_kalshi_bins.py --manual-survival ... --as-of 2025-10-28` if the live API is unavailable; verify `data_raw/kalshi_bins.yml.meta.json` stamps today.
+- Run `make calibrate`, `make freeze-backtest`, and `make sweep-ensemble`; archive `data_proc/backtest_metrics.json` and `data_proc/ensemble_weight_sweep.csv`.
+
+**Oct 29 (Wed) — WPSR drop & scenario sweep**
+- 10:30 ET: ingest WPSR (`scripts/freeze_wpsr_html.py` or live API), update `data_raw/wpsr_state.yml`, rerun `make report`.
+- Rebuild figures/deck; note any scenario shifts (ΔP) in memo “Risks” section.
+- If Kalshi markets move materially, refresh bins and capture the new meta stamp.
+
+**Oct 30 (Thu) — Final memo/deck freeze**
+- From a clean clone: `make report` then `make deck`; confirm build artifacts in `build/`.
+- Record final git commit SHA via `git rev-parse HEAD` and paste into `reports/memo.md` appendix (cite as “Submission SHA”).
+- Double-check `data_proc/meta/*.json` freshness; zip `build/` + memo for submission.
+
+> Tip: include the SHA, run timestamp, and data sources on the cover slide so judges can audit reproducibility in minutes.

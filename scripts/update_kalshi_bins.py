@@ -20,10 +20,13 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
+import argparse
 import base64
+import json
 import time
 
 import requests
@@ -195,6 +198,24 @@ def write_bins(path: Path, thresholds: List[float], cdf_values: List[float]) -> 
         yaml.safe_dump(payload, handle, sort_keys=False)
 
 
+def write_meta(
+    path: Path,
+    source: str,
+    thresholds: List[float],
+    cdf_values: List[float],
+    as_of: str | None,
+) -> None:
+    meta = {
+        "source": source,
+        "as_of": as_of or datetime.now(timezone.utc).date().isoformat(),
+        "fetched_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "thresholds": thresholds,
+        "probabilities": cdf_values,
+    }
+    meta_path = path.with_suffix(path.suffix + ".meta.json")
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
 def _market_prob_mid(market: Dict[str, object]) -> float | None:
     # Prefer midpoint of yes_bid/yes_ask (in cents), else last_price
     def to_p01(x: object) -> float | None:
@@ -249,47 +270,87 @@ def find_prob_for_threshold(
     return float(candidates[len(candidates) // 2])
 
 
+def parse_manual_survival(raw: str) -> Dict[float, float]:
+    result: Dict[float, float] = {}
+    for part in raw.split(","):
+        if not part.strip():
+            continue
+        if "=" not in part:
+            raise ValueError(f"Invalid manual entry '{part}'; expected threshold=prob")
+        key, value = [item.strip() for item in part.split("=", 1)]
+        thr = float(key)
+        prob = float(value)
+        if prob > 1:
+            prob = prob / 100.0
+        if prob < 0 or prob > 1:
+            raise ValueError(f"Probability for {thr} must be within [0,1]")
+        result[thr] = prob
+    return result
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Update Kalshi bin priors")
+    parser.add_argument(
+        "--manual-survival",
+        help="Comma separated threshold=prob_yes list (probabilities as 0-1 or percentage). Example: 3.05=0.62,3.10=0.48",
+    )
+    parser.add_argument(
+        "--as-of",
+        help="Override as_of date for metadata (YYYY-MM-DD). Defaults to today.",
+    )
+    args = parser.parse_args()
+
     bins_path = Path("data_raw/kalshi_bins.yml")
     if not bins_path.exists():
         print(f"Missing {bins_path}")
         return 1
 
     markets: List[Dict[str, object]] = []
-    key_id = os.environ.get("KALSHI_API_KEY_ID")
-    pem_path = os.environ.get("KALSHI_PRIVATE_KEY_PATH")
-    api_base = os.environ.get("KALSHI_API_BASE", API_BASE_V2_DEFAULT)
-    series_ticker = os.environ.get("KALSHI_SERIES_TICKER", "KXAAAGASM")
-    event_ticker = os.environ.get("KALSHI_EVENT_TICKER")
-
-    if key_id and pem_path:
+    source_label = "kalshi_api"
+    manual_probs: Dict[float, float] | None = None
+    if args.manual_survival:
         try:
-            markets = fetch_energy_markets_v2(
-                key_id,
-                pem_path,
-                api_base,
-                series_ticker=series_ticker,
-                event_ticker=event_ticker,
-            )
-            print("Fetched markets via API key (v2)")
-        except Exception as exc:  # noqa: BLE001
-            print(f"Kalshi API v2 error: {exc}")
+            manual_probs = parse_manual_survival(args.manual_survival)
+            source_label = "manual_input"
+        except ValueError as exc:
+            print(exc)
             return 1
     else:
-        email = os.environ.get("KALSHI_EMAIL")
-        password = os.environ.get("KALSHI_PASSWORD")
-        if not email or not password:
-            print(
-                "Set KALSHI_API_KEY_ID/KALSHI_PRIVATE_KEY_PATH (preferred) or KALSHI_EMAIL/KALSHI_PASSWORD"
-            )
-            return 1
-        try:
-            token = login_v1(email, password)
-            markets = fetch_energy_markets_v1(token)
-            print("Fetched markets via session (v1)")
-        except Exception as exc:  # noqa: BLE001
-            print(f"Kalshi API v1 error: {exc}")
-            return 1
+        key_id = os.environ.get("KALSHI_API_KEY_ID")
+        pem_path = os.environ.get("KALSHI_PRIVATE_KEY_PATH")
+        api_base = os.environ.get("KALSHI_API_BASE", API_BASE_V2_DEFAULT)
+        series_ticker = os.environ.get("KALSHI_SERIES_TICKER", "KXAAAGASM")
+        event_ticker = os.environ.get("KALSHI_EVENT_TICKER")
+
+        if key_id and pem_path:
+            try:
+                markets = fetch_energy_markets_v2(
+                    key_id,
+                    pem_path,
+                    api_base,
+                    series_ticker=series_ticker,
+                    event_ticker=event_ticker,
+                )
+                print("Fetched markets via API key (v2)")
+            except Exception as exc:  # noqa: BLE001
+                print(f"Kalshi API v2 error: {exc}")
+                return 1
+        else:
+            email = os.environ.get("KALSHI_EMAIL")
+            password = os.environ.get("KALSHI_PASSWORD")
+            if not email or not password:
+                print(
+                    "Set KALSHI_API_KEY_ID/KALSHI_PRIVATE_KEY_PATH (preferred) or KALSHI_EMAIL/KALSHI_PASSWORD, "
+                    "or use --manual-survival for offline updates."
+                )
+                return 1
+            try:
+                token = login_v1(email, password)
+                markets = fetch_energy_markets_v1(token)
+                print("Fetched markets via session (v1)")
+            except Exception as exc:  # noqa: BLE001
+                print(f"Kalshi API v1 error: {exc}")
+                return 1
 
     bins = load_bins(bins_path)
     thresholds = [float(x) for x in bins.get("thresholds", [])]
@@ -299,7 +360,10 @@ def main() -> int:
 
     updated = False
     for idx, thr in enumerate(thresholds):
-        p_ge = find_prob_for_threshold(markets, thr)
+        if manual_probs is not None:
+            p_ge = manual_probs.get(thr)
+        else:
+            p_ge = find_prob_for_threshold(markets, thr)
         if p_ge is None:
             continue
         p_le = 1.0 - max(0.0, min(1.0, p_ge))
@@ -307,11 +371,24 @@ def main() -> int:
             cdf_values[idx] = p_le
             updated = True
 
-    if updated:
+    if manual_probs is None and not markets:
+        print("No market data available; bins not updated")
+        return 1
+
+    if updated or manual_probs is not None:
         write_bins(bins_path, thresholds, cdf_values)
         print("kalshi_bins.yml updated")
     else:
         print("kalshi_bins.yml unchanged (no matching thresholds found)")
+
+    write_meta(
+        bins_path,
+        source_label,
+        thresholds,
+        cdf_values,
+        args.as_of,
+    )
+    print("kalshi_bins metadata recorded")
     return 0
 
 

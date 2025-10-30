@@ -1,152 +1,125 @@
 # Kalshi Gas Analytics
 
-End-to-end analytics pipeline for U.S. gasoline markets combining AAA retail prices, EIA fundamentals, RBOB futures, and Kalshi market priors. The workflow builds an ensemble forecast, scores it with proper scoring rules, applies risk gates, and assembles a memo-ready report — all reproducible via `make report`.
+Forecast and reporting toolkit for the YUHA × Kalshi Market Research & Modeling Competition. The repo combines authoritative public data (AAA resolver, EIA fundamentals, CME/Nasdaq RBOB futures, Kalshi market priors), builds an ensemble forecast, scores it, and auto-generates submission-ready memo/deck artefacts.
 
-## Quickstart
+---
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-make report
-```
+## Current Snapshot *(run: 2025‑10‑30 16:22 UTC)*
 
-The command pulls (or falls back to bundled samples for offline mode) each data source, trains the ensemble, runs a backtest, and writes artefacts to `build/`:
+- **Target:** AAA US national regular gasoline price, Oct 31 2025 resolution threshold **$3.10/gal**.
+- **Posterior probability:** **72.3 %** that AAA > $3.10 (posterior mean **$3.26**, 90 % CI [3.12, 3.39]).
+- **Key drivers:** 5.94 mmbbl gasoline stock draw (week ending Oct 24), refinery utilisation 93 %, Kalshi prior tilted bullish (45 %/20 %/8 % for ≥ $3.05/3.10/3.15 as of Oct 30).
+- **Risk gates:** Storm override off; utilisation above 90 % so no tightness flag, but inventory draw trigger is on.
+- **Backtests (Jan 2023–Sep 2025 freeze schedule):**
+  - Posterior Brier 0.146 (vs carry 0.048) — market prior still carries most signal.
+  - Posterior CRPS 0.060 (carry 0.032). Ensemble sweep keeps prior dominant (best log-score weight 100 % prior; best CRPS weight 90 % prior / 10 % nowcast).
 
-- `build/figures/*.png`: visuals for memo
-- `build/memo/forecast_results.csv`: scored test set
-- `build/memo/report.md`: rendered memo
+### Live data status
 
-## One-command Rebuild
+| Feed | Source | Latest as-of | Notes |
+| --- | --- | --- | --- |
+| AAA national average | https://gasprices.aaa.com (HTML fallback) | **2025‑10‑30** | Resolver; twice-daily capture recommended. |
+| WPSR fundamentals | https://www.eia.gov/petroleum/supply/weekly/ | **2025‑10‑24** | Next release expected 2025‑10‑31 10:30 ET. |
+| RBOB settle (front / 2nd month) | CME settle (manual entry) | **2025‑10‑29** | Oct 30 settle pending – update via `scripts/update_rbob_csv.py`. |
+| Kalshi bins | Trade API v2 (RSA-PSS) | **2025‑10‑30** | `scripts/update_kalshi_bins.py` pulls ≥ $3.05/$3.10/$3.15 midpoints. |
+| NHC flag | data_raw/nhc_flag.yml | OFF | Manual override for storm risk. |
 
-Use `make report` at any time to rerun ETL, modelling, posterior generation, risk gating, and report compilation with the current data snapshots. The command is idempotent and will refresh figures and memo outputs in `build/`.
+Latest memo/deck/report artefacts are zipped in `build/submission_oct30.zip`.
 
-## How to Reproduce
+---
 
-1. Create or activate the virtual environment and install dependencies (see Quickstart).
-2. (Optional) Update `data_raw/nhc_flag.yml` or `data_raw/wpsr_state.yml` with the latest analyst inputs if live data are gated.
-3. Ensure any “as-of” timestamp is recorded in the memo by setting the ISO string you used for data pulls inside `data_raw/wpsr_state.yml` (add an `as_of:` field if desired). Judges can confirm the run time via the memo header’s `Generated on …` entry.
-4. Run `make report` for a full rebuild or `make figures` if you only need refreshed PNGs.
+## Repository highlights
 
-The repo is fully self-contained; live API credentials are optional. All sample data are bundled, so the commands above will always succeed offline.
+- **ETL** (`src/kalshi_gas/etl`): resilient fallbacks (live → last_good → sample), provenance metadata, HTML parsers for AAA/WPSR.
+- **Models** (`src/kalshi_gas/models`): local-trend nowcast, asymmetric pass-through, isotonic Kalshi prior, ensemble/posterior with scenario sensitivities.
+- **Pipeline** (`src/kalshi_gas/pipeline/run_all.py`): one-command rebuild of ETL → dataset → risk gating → posterior → memo/deck.
+- **Backtesting** (`src/kalshi_gas/pipeline/backtest.py`): freeze-date harness, proper scoring (Brier/CRPS), calibration plots.
+- **Reporting** (`src/kalshi_gas/reporting`): Markdown memo & deck templated with figure footers, “Why this matters” call-outs, SHA stamping.
+- **Automation** (`Makefile`): reproducible targets for report, calibrations, backtests, ensemble sweep, lint/tests.
 
-## Live Data
+---
 
-Set `KALSHI_GAS_USE_LIVE=1` to enable live HTTP pulls. Additional credentials:
+## Reproducing the forecast
 
-| Source | Variables |
-| --- | --- |
-| EIA | `EIA_API_KEY` |
-| Kalshi | `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, `KALSHI_API_BASE` (default `https://api.elections.kalshi.com`), optional `KALSHI_SERIES_TICKER` and `KALSHI_EVENT_TICKER`; also supports `KALSHI_PRIVATE_KEY_PASSPHRASE` and `KALSHI_PY_PRIVATE_KEY_PEM` |
+1. **Environment**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -e .[dev]
+   ```
+2. **Credentials (optional but recommended)**
+   ```bash
+   export KALSHI_GAS_USE_LIVE=1
+   export EIA_API_KEY="..."
+   export KALSHI_API_KEY_ID="..."
+   export KALSHI_PRIVATE_KEY_PATH="$HOME/.kalshi/kalshi_private_key.pem"
+   # Optional: export KALSHI_PY_PRIVATE_KEY_PEM="..."
+   ```
+3. **Update live snapshots (if permitted)**
+   ```bash
+   python scripts/update_kalshi_bins.py          # Kalshi API (RSA-PSS signed)
+   python scripts/update_rbob_csv.py --date YYYY-MM-DD --settle <value> --source "CME settle ..."
+   python scripts/freeze_wpsr_html.py            # pulls latest WPSR summary HTML
+   ```
+   *(For AAA the HTML fallback runs inside the ETL; capture a screenshot for audit.)*
+4. **Full rebuild**
+   ```bash
+   make report            # ETL → posterior → memo/deck
+   make calibrate         # prior weight sweep
+   make freeze-backtest   # historical freeze-date evaluation
+   make sweep-ensemble    # ensemble weight grid search
+   ```
+5. **Outputs**
+   - `build/memo/report.md` & `build/deck/deck.md`
+   - `build/figures/*.png`
+   - `data_proc/backtest_metrics.json`, `data_proc/ensemble_weight_sweep.{csv,json}`
+   - `build/submission_oct30.zip` (memo, deck, figures, provenance)
 
-Example session (RSA-PSS per Kalshi docs):
+Run `make test` for the 36 unit/integration tests; `make lint` for formatting/static checks.
 
-```bash
-source .venv/bin/activate
-export KALSHI_GAS_USE_LIVE=1
-export EIA_API_KEY="<your_eia_key>"
-export KALSHI_API_BASE="https://api.elections.kalshi.com"
-export KALSHI_API_KEY_ID="<your_key_id>"
-export KALSHI_PRIVATE_KEY_PATH="$HOME/.kalshi/kalshi_private_key.pem"
-# Optional passphrase or inline PEM
-# export KALSHI_PRIVATE_KEY_PASSPHRASE="<passphrase>"
-# export KALSHI_PY_PRIVATE_KEY_PEM="$(cat "$HOME/.kalshi/kalshi_private_key.pem")"
-# Optional: some clients read the PEM from an env var
-export KALSHI_PY_PRIVATE_KEY_PEM="$(cat "$HOME/.kalshi/kalshi_private_key.pem")"
-# AAA gas series/event (update monthly to last day):
-export KALSHI_SERIES_TICKER="KXAAAGASM"
-export KALSHI_EVENT_TICKER="KXAAAGASM-25OCT31"
-# Update market-implied prior bins before building the report
-make update-kalshi-bins
-make report
-```
+---
 
-EIA/RBOB default API series (with HTML fallbacks):
-- RBOB weekly: `PET.RBRTWD.W`
-- Gasoline stocks weekly: `PET.WGTSTUS1.W`
-- Retail weekly US regular (optional): `PET.EMM_EPMRR_PTE_NUS_DPG.W`
+## Data ingest & manual updates
 
-## Offline Data Playbooks
+- **AAA national average:** live JSON endpoint is blocked (403). ETL scrapes the homepage with a browser user agent; save screenshots or copy values into `data_raw/last_good.aaa.csv` if you capture them manually.
+- **RBOB settles:** Nasdaq Data Link CHRIS endpoints are firewall-protected; until whitelisted, pull CME official settles manually and append via `scripts/update_rbob_csv.py`. CSV bulk import accepts `date,settle,second_month,spread,...`.
+- **WPSR fundamentals:** rerun `scripts/freeze_wpsr_html.py` after each Wednesday release (or download HTML/PDF and replace `data_raw/wpsr_summary.html`). Risk gates read refinery utilisation and stock draws from that snapshot.
+- **Kalshi bins:** `scripts/update_kalshi_bins.py` signs requests with RSA-PSS (API key + private key). Falls back to `data_raw/kalshi_bins.yml` if credentials are absent.
+- **Storm / analyst overrides:** toggle `data_raw/nhc_flag.yml` and `data_raw/wpsr_state.yml` as described in `docs/RUNBOOK.md`.
 
-When live APIs are unavailable, stage richer offline inputs before running the pipeline:
+Provenance sidecars in `data_proc/meta/*.json` capture mode, as-of, record counts, and fallback chains for auditability.
 
-- `python scripts/bootstrap_last_good.py --overwrite` promotes curated CSVs (or the bundled samples) into `data_raw/last_good.*` snapshots so ETL runs outside of sample mode.
-- `python scripts/simulate_market_data.py` fabricates a full daily/weekly dataset up to the chosen end-date, including RBOB, EIA fundamentals, Kalshi priors, and risk-gate scaffolding.
-- `python scripts/update_wpsr_state.py --latest-change -3.6 --refinery-util 88.9 --product-supplied 8.5` refreshes the analyst WPSR overrides used for risk gating.
-- `python scripts/update_nhc_flag.py --flag --note "Invest 96L on watch"` toggles the hurricane override fed into the risk box.
-- `python scripts/log_manual_label.py --operator MB --aaa 3.112 --eia 3.115 --notes "08:45 ET"` appends a resolver observation (see `docs/RUNBOOK.md` for the twice-daily checklist).
-- `python scripts/log_prompt.py` offers an interactive prompt for the same manual log — ideal for scheduled reminders.
+---
 
-## Fallback & Freshness
+## Submission package checklist
 
-Each ETL component follows a deterministic fallback chain: live API → `data_raw/last_good.*` snapshot → bundled samples in `data/sample/`. Provenance sidecars under `data_proc/meta/` capture the current mode and as-of timestamps. Run `make check-fresh` to assert that the latest last-good snapshots meet freshness guardrails; sample mode automatically skips the check for offline runs.
+`build/submission_oct30.zip` contains:
+- `memo/report.md` – competition memo with timestamp/SHA, probability call, sensitivities.
+- `deck/deck.md` – slide deck outline with “Why this matters” notes.
+- `figures/*.png` – nowcast cone, pass-through fit, prior CDF, posterior density, calibration, risk dashboard, sensitivities.
+- `metadata/data_provenance.json` + `data_proc/meta/*.json` – data lineage.
 
-> ℹ️ The EIA Weekly Petroleum Status Report generally posts Wednesdays at 10:30 ET; release times shift when U.S. federal holidays fall early in the week. Update your `last_good` snapshot accordingly if live pulls are delayed.
+Before final submission:
+1. Capture latest AAA/RBOB/Kalshi snapshots (document sources).
+2. Pull the new WPSR release (if available) and rerun `make report`.
+3. Rebuild memo/deck/zip and confirm SHA printed in the memo appendix (`git rev-parse HEAD`).
 
-## Diagnostics
+---
 
-Use a single command to check each live source, fallback status, probe HTTP endpoints, and print key environment hints:
+## Future improvements
 
-```bash
-make live-check
-```
+- Automate CME/Nasdaq settle ingestion (requires paid Data Link plan or alternative licensed feed).
+- Integrate EIA API retries/backoff when v2 endpoints return 500 immediately after release.
+- Expand Kalshi prior to include additional bins (≥ $3.00/3.05/3.10/3.15) for finer interpolation.
+- Add sensitivity dashboards for alternative thresholds (e.g., $3.00, $3.20) and regional AAA dispersion.
+- Stand up daily CI job to rebuild memo when new data arrive (GitHub Actions + scheduled cron).
 
-This displays mode (live/last_good/sample), as_of date, freshness, records, and the HTTP status for AAA/EIA/Kalshi endpoints. Helpful when live APIs block or rate-limit.
+---
 
-## Data Assembly (nearest-week joins)
+## Support & questions
 
-The dataset assembler uses nearest-week as-of merges to align weekly EIA and RBOB series with daily AAA dates. This improves robustness when only 1–2 live AAA days are available. Kalshi daily is merged with a 2‑day tolerance window.
+- Daily ops checklist, manual logging, and reminder scripts are documented in `docs/RUNBOOK.md`.
+- For API credential rotation or data snapshots, update `config` files and rerun `make report`.
+- Questions / future work ideas: open an issue or annotate the README with new data links.
 
-## Project Layout
-
-- `src/kalshi_gas/etl`: Extract/transform/load tasks
-- `src/kalshi_gas/data`: Dataset assembly logic
-- `src/kalshi_gas/models`: Nowcast, pass-through, market-prior, and ensemble models
-- `src/kalshi_gas/backtest`: Scoring rules and evaluation harness
-- `src/kalshi_gas/reporting`: Visuals and memo builder
-- `src/kalshi_gas/risk`: NHC/WPSR risk gate checks
-
-## Development
-
-```bash
-make lint
-make test
-```
-
-CI runs linting and tests on push (see `.github/workflows/ci.yml`).
-
-## Acceptance & Repro
-
-- CRPS-optimal (production) weights:
-```bash
-cat > config.crps.yaml <<'YML'
-data:
-  raw_dir: data/raw
-  interim_dir: data/interim
-  processed_dir: data/processed
-  external_dir: data/external
-  build_dir: build
-model:
-  ensemble_weights:
-    nowcast: 0.0
-    pass_through: 1.0
-    market_prior: 0.0
-  calibration_bins: 10
-  horizon_days: 7
-  prior_weight: 0.35
-risk_gates:
-  nhc_active_threshold: 1
-  wpsr_inventory_cutoff: -3.0
-YML
-python -m kalshi_gas.cli report --config config.crps.yaml
-```
-
-- Freeze-date backtest and metrics at 3.10:
-```bash
-make freeze-backtest
-python - <<'PY'
-import json, pathlib
-s=json.loads(pathlib.Path('data_proc/backtest_metrics.json').read_text())
-print(json.dumps(s.get('per_threshold',{}).get('3.10',{}), indent=2))
-PY
-```
+Good luck in the YUHA × Kalshi competition—this repository is ready to generate and defend an evidence-backed forecast, with clear instructions for refreshing data as new information arrives. ***

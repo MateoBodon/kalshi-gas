@@ -190,10 +190,14 @@ class EIAExtractor:
 class EIATransformer:
     def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
         frame = frame.copy()
-        frame["inventory_mmbbl"] = frame["inventory_mmbbl"].astype(float)
+        frame["inventory_mmbbl"] = pd.to_numeric(
+            frame["inventory_mmbbl"], errors="coerce"
+        )
         if "production_mbd" not in frame:
             frame["production_mbd"] = pd.NA
-        frame["production_mbd"] = frame["production_mbd"].astype(float)
+        frame["production_mbd"] = pd.to_numeric(
+            frame["production_mbd"], errors="coerce"
+        )
         frame = frame.dropna(subset=["date", "inventory_mmbbl"])
         frame.sort_values("date", inplace=True)
         frame["inventory_change"] = frame["inventory_mmbbl"].diff()

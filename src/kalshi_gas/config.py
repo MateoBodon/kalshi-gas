@@ -53,9 +53,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "model": {
         "ensemble_weights": {
-            "nowcast": 0.4,
-            "pass_through": 0.35,
-            "market_prior": 0.25,
+            "nowcast": 0.0,
+            "pass_through": 0.0,
+            "market_prior": 1.0,
         },
         "calibration_bins": 10,
         "horizon_days": 7,

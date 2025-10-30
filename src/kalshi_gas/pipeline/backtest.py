@@ -25,12 +25,12 @@ from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 def sample_crps(samples: np.ndarray, observation: float) -> float:
     """Compute CRPS via empirical samples."""
 
-    draws = np.asarray(samples, dtype=float)
+    draws = np.asarray(samples, dtype=float).reshape(-1)
     if draws.size == 0:
         raise ValueError("CRPS requires non-empty sample array")
     obs = float(observation)
     diff_obs = np.mean(np.abs(draws - obs))
-    diff_draws = np.mean(np.abs(draws[:, None] - draws[None, :]))
+    diff_draws = np.mean(np.abs(np.subtract.outer(draws, draws)))
     return float(diff_obs - 0.5 * diff_draws)
 
 
