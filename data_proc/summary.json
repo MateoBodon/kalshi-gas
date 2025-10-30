@@ -7,5 +7,39 @@
   "dataset_digest": "dda40006e07ef3dbd3b2dafbeb9e51ef127e00dd806a95889faaa315ee9eab86",
   "days_to_event": 1,
   "beta_eff": 0.00036865612398272185,
-  "alpha_lift_applied": 0.004285714285714285
+  "alpha_lift_applied": 0.004285714285714285,
+  "tplus1_sensitivity": [
+    {
+      "scenario": "RBOB +$0.05",
+      "beta_eff": 0.00036865612398272185,
+      "rbob_delta": 0.05,
+      "alpha_delta": 0.0,
+      "probability": 0.0796,
+      "prob_delta_pp": 0.0
+    },
+    {
+      "scenario": "RBOB -$0.05",
+      "beta_eff": 0.00036865612398272185,
+      "rbob_delta": -0.05,
+      "alpha_delta": 0.0,
+      "probability": 0.0796,
+      "prob_delta_pp": 0.0
+    },
+    {
+      "scenario": "\u03b1 +$0.02",
+      "beta_eff": 0.00036865612398272185,
+      "rbob_delta": 0.0,
+      "alpha_delta": 0.02,
+      "probability": 0.2087898639396496,
+      "prob_delta_pp": 12.91898639396496
+    },
+    {
+      "scenario": "\u03b1 -$0.02",
+      "beta_eff": 0.00036865612398272185,
+      "rbob_delta": 0.0,
+      "alpha_delta": -0.02,
+      "probability": 0.0796,
+      "prob_delta_pp": 0.0
+    }
+  ]
 }

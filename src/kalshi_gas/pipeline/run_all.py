@@ -742,6 +742,29 @@ def run_pipeline(
         key_gt = f"prob_gt_{threshold:.2f}"
         posterior_summary[key_gt] = prob_value
 
+    horizon_threshold = float(event_threshold)
+    base_prob_event = base_posterior.prob_above(horizon_threshold)
+    horizon_scenarios: list[dict[str, float]] = []
+    scenario_specs = [
+        ("RBOB +$0.05", 0.05, 0.0),
+        ("RBOB -$0.05", -0.05, 0.0),
+        ("α +$0.02", 0.0, 0.02),
+        ("α -$0.02", 0.0, -0.02),
+    ]
+    for label, rbob_change, alpha_change in scenario_specs:
+        scenario_posterior = posterior_factory(rbob_change, alpha_change)
+        scenario_prob = scenario_posterior.prob_above(horizon_threshold)
+        horizon_scenarios.append(
+            {
+                "scenario": label,
+                "beta_eff": beta_eff,
+                "rbob_delta": rbob_change,
+                "alpha_delta": alpha_change,
+                "probability": scenario_prob,
+                "prob_delta_pp": (scenario_prob - base_prob_event) * 100,
+            }
+        )
+
     event_key = f"prob_gt_{float(event_threshold):.2f}"
     summary_payload = {
         "as_of": dataset_as_of,
@@ -754,6 +777,7 @@ def run_pipeline(
         "beta_eff": beta_eff,
         "alpha_lift_applied": alpha_lift_applied,
     }
+    summary_payload["tplus1_sensitivity"] = horizon_scenarios
     (Path("data_proc") / "summary.json").write_text(
         json.dumps(summary_payload, indent=2), encoding="utf-8"
     )
@@ -1002,6 +1026,7 @@ def run_pipeline(
         figures=figures_relative,
         posterior=posterior_summary,
         sensitivity=sensitivity,
+        tplus1_sensitivity=horizon_scenarios,
         risk_flags=risk_flags,
         risk_context=risk_context,
         provenance=provenance_records,

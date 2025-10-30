@@ -1,11 +1,11 @@
 # Gas Market Forecast Report
 
-Generated on 2025-10-30T20:06:45+00:00
+Generated on 2025-10-30T20:29:08+00:00
 Provenance sidecars: [data_proc/meta/aaa.json](data_proc/meta/aaa.json), [data_proc/meta/eia.json](data_proc/meta/eia.json), [data_proc/meta/kalshi.json](data_proc/meta/kalshi.json), [data_proc/meta/rbob.json](data_proc/meta/rbob.json), [data_proc/meta/dataset.json](data_proc/meta/dataset.json)
 ## Headline Call
 **Final Probability:** 8.0% that AAA national regular > $3.10 on 2025-10-31
 _As of 2025-10-30._
-As of 2025-10-30, we assign 8.0% to AAA National Average Regular > $3.10 on Oct 31, 2025. The posterior mean price is $3.07, blending a prior weight of 0.20. Key adjustments: WPSR tightness: boosted upside pass-through and +3¢ alpha lift.
+> As of 2025-10-30, we assign 8.0% to AAA National Average Regular > $3.10 on Oct 31, 2025. The posterior mean price is $3.07, blending a prior weight of 0.20. Key adjustments: WPSR tightness: boosted upside pass-through and +3¢ alpha lift.
 
 ## Data Sources & Provenance
 | Source | Mode | As Of | Fresh | Records | Path |
@@ -40,10 +40,10 @@ As of 2025-10-30, we assign 8.0% to AAA National Average Regular > $3.10 on Oct 
 | Dataset as_of | 2025-10-30 | — |
 
 ![Risk Box](../figures/risk_box.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ![Fundamentals Dashboard](../figures/wpsr_dashboard.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ## Forecast Performance
 ### Ensemble Metrics
@@ -93,14 +93,23 @@ _As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
 | 1.00 | 1.00 | 178 |
 
 ![Forecast vs Actual](../figures/nowcast.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ![Calibration Curve](../figures/calibration.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ## Model Outputs
 ![Sensitivity Bars](../figures/sensitivity_bars.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
+
+_Horizon-aware T+1 adjustments:_
+
+| Scenario | β_eff | Δα | ΔP(> 3.10) |
+| --- | --- | --- | --- |
+| RBOB +$0.05 | 0.0004 | +0.0¢ | +0.00pp |
+| RBOB -$0.05 | 0.0004 | +0.0¢ | +0.00pp |
+| α +$0.02 | 0.0004 | +2.0¢ | +12.92pp |
+| α -$0.02 | 0.0004 | -2.0¢ | +0.00pp |
 
 ### Posterior Snapshot
 - Mean: 3.0713
@@ -108,7 +117,7 @@ _As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
 - 90% CI: [3.0564, 3.0862] (0.0149 down / 0.0149 up)
 - 80% CI: [3.0598, 3.0828]
 - Prior weight: 0.20 (file)
-- Asymmetry: Δβ = -0.1237 (95% CI [-0.0615, 0.0312])
+- Asymmetry: Δβ = -0.1237 (95% CI [-0.0594, 0.0375])
 - P(X > 2.90) = 0.8789
 - P(X > 2.95) = 0.8786
 - P(X > 3.00) = 0.8783
@@ -120,13 +129,13 @@ _As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
 _α_t note_: latest α_t=2.33; 26w mean α_t=2.42
 
 ![Pass-through Fit](../figures/pass_through.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ![Market-implied Prior CDF](../figures/prior_cdf.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ![Posterior Density](../figures/posterior.png)
-_As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
+_As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME RB settle ($/gal)_
 
 ### Sensitivity Grid (Detail)
 | Threshold | ΔRBOB | ΔAlpha | Prob > Threshold |
@@ -183,4 +192,4 @@ _As of 2025-10-30 • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)_
 - data_proc/meta/kalshi.json
 - data_proc/meta/rbob.json
 - data_proc/meta/dataset.json
-- Submission SHA: a9ad1d1c531632a7b2fd7f73c4c2eb456336e7cf
+- Submission SHA: 09a170c105e73c729fd160106605ffdb2f0d003f

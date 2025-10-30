@@ -45,6 +45,7 @@ class ReportBuilder:
         figures: Dict[str, str],
         posterior: Dict[str, float],
         sensitivity: pd.DataFrame,
+        tplus1_sensitivity: list[dict[str, object]] | None,
         risk_flags: Dict[str, object],
         risk_context: Dict[str, object] | None,
         provenance: list[dict[str, object]] | None,
@@ -62,6 +63,7 @@ class ReportBuilder:
             key: value for key, value in metrics.items() if value is not None
         }
         provenance_records = provenance or []
+        tplus1_rows = tplus1_sensitivity or []
         benchmark_rows = benchmarks or []
         sensitivity_bar_rows = (
             sensitivity_bars.to_dict(orient="records")
@@ -70,7 +72,8 @@ class ReportBuilder:
         )
         as_of_label = as_of or "n/a"
         figure_footer = (
-            f"As of {as_of_label} • Sources: AAA (daily), EIA WPSR (Wed 10:30 ET)"
+            f"As of {as_of_label} • Sources: AAA daily (USD/gal); "
+            "EIA WPSR weekly (mmbbl); CME RB settle ($/gal)"
         )
         submission_sha = self._git_sha()
         content = template.render(
@@ -79,6 +82,7 @@ class ReportBuilder:
             calibration=calibration.fillna(0).to_dict(orient="records"),
             posterior=posterior,
             sensitivity=sensitivity.to_dict(orient="records"),
+            tplus1_sensitivity=tplus1_rows,
             risk_flags=risk_flags,
             risk_context=risk_context or {},
             provenance=provenance_records,

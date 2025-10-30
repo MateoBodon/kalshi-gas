@@ -16,7 +16,7 @@ Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]
 {% endif %}
 
 _As of {{ as_of_label }}._
-{{ posterior.thesis or "No thesis available." }}
+> {{ posterior.thesis or "No thesis available." }}
 
 ## Data Sources & Provenance
 | Source | Mode | As Of | Fresh | Records | Path |
@@ -122,6 +122,17 @@ _{{ figure_footer }}_
 ## Model Outputs
 ![Sensitivity Bars]({{ figures.sensitivity }})
 _{{ figure_footer }}_
+
+{% set horizon_threshold = posterior.final_threshold or posterior.event_threshold %}
+{% if tplus1_sensitivity %}
+_Horizon-aware T+1 adjustments:_
+
+| Scenario | β_eff | Δα | ΔP(> {{ "%.2f"|format(horizon_threshold) }}) |
+| --- | --- | --- | --- |
+{% for row in tplus1_sensitivity -%}
+| {{ row["scenario"] }} | {{ "%.4f"|format(row.get("beta_eff", 0.0)) }} | {{ "%+.1f"|format((row.get("alpha_delta", 0.0) or 0.0) * 100) }}¢ | {{ "%+.2f"|format(row.get("prob_delta_pp", 0.0)) }}pp |
+{% endfor %}
+{% endif %}
 
 ### Posterior Snapshot
 - Mean: {{ "%.4f"|format(posterior.mean) }}
