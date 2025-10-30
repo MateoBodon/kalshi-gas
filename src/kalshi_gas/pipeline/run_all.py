@@ -136,6 +136,26 @@ def _apply_alpha_beta_adjustments(
     return alpha_lift_applied, scaled_params
 
 
+def _effective_prior_weight(
+    prior_weight: float,
+    *,
+    days_to_event: int | None,
+    event_threshold: float,
+    nowcast_mean: float,
+    residual_sigma: float,
+) -> tuple[float, float]:
+    """Return the effective prior weight after horizon gating along with the gap z-score."""
+
+    z_score = 0.0
+    if residual_sigma > 0:
+        z_score = abs(float(event_threshold) - float(nowcast_mean)) / float(
+            residual_sigma
+        )
+    if days_to_event is not None and days_to_event <= 1:
+        return 0.0, z_score
+    return float(prior_weight), z_score
+
+
 def _force_rebuild_directories(cfg: PipelineConfig) -> None:
     targets = [
         cfg.data.processed_dir,
@@ -720,6 +740,13 @@ def run_pipeline(
         scale=residual_sigma,
         size=sample_size,
     )
+    prior_weight_effective, _prior_gap_z = _effective_prior_weight(
+        prior_weight,
+        days_to_event=days_to_event,
+        event_threshold=event_threshold,
+        nowcast_mean=nowcast_mean,
+        residual_sigma=residual_sigma,
+    )
 
     def posterior_factory(
         rbob_delta: float, alpha_delta: float
@@ -742,7 +769,7 @@ def run_pipeline(
         return PosteriorDistribution(
             samples=adjusted_samples,
             prior_cdf=prior_fn,
-            prior_weight=prior_weight,
+            prior_weight=prior_weight_effective,
         )
 
     base_posterior = posterior_factory(0.0, 0.0)
@@ -771,6 +798,7 @@ def run_pipeline(
 
     posterior_summary = base_posterior.summary()
     posterior_summary["prior_weight"] = prior_weight
+    posterior_summary["prior_weight_effective"] = prior_weight_effective
     posterior_summary["prior_weight_source"] = prior_weight_source
     posterior_summary["event_threshold"] = event_threshold
     posterior_summary["dataset_digest"] = dataset_digest
@@ -779,6 +807,7 @@ def run_pipeline(
     posterior_summary["days_to_event"] = days_to_event
     posterior_summary["beta_eff"] = beta_eff
     posterior_summary["alpha_lift_applied"] = alpha_lift_applied
+    event_ctx["prior_weight_effective"] = prior_weight_effective
     if central_probability is not None:
         posterior_summary["central_kalshi_probability"] = central_probability
     for threshold in thresholds:
@@ -894,6 +923,7 @@ def run_pipeline(
             "alpha_lift": float(alpha_lift_applied),
             "beta_eff": float(beta_eff),
             "prior_weight": float(prior_weight),
+            "prior_weight_effective": float(prior_weight_effective),
             "residual_sigma": float(residual_sigma),
             "point_forecast": float(posterior_summary.get("mean", nowcast_mean)),
             "tail_probability": float(base_prob_event),
@@ -907,6 +937,7 @@ def run_pipeline(
         "threshold": float(event_threshold),
         "prob_yes": posterior_summary.get(event_key),
         "prior_weight": prior_weight,
+        "prior_weight_effective": prior_weight_effective,
         "prior_weight_source": prior_weight_source,
         "dataset_digest": dataset_digest,
         "days_to_event": days_to_event,

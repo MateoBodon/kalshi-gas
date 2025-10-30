@@ -1,11 +1,11 @@
 # Gas Market Forecast Report
 
-Generated on 2025-10-30T23:09:02+00:00
+Generated on 2025-10-30T23:16:34+00:00
 Provenance sidecars: [data_proc/meta/aaa.json](data_proc/meta/aaa.json), [data_proc/meta/eia.json](data_proc/meta/eia.json), [data_proc/meta/kalshi.json](data_proc/meta/kalshi.json), [data_proc/meta/rbob.json](data_proc/meta/rbob.json), [data_proc/meta/dataset.json](data_proc/meta/dataset.json)
 ## Headline Call
-**Final Probability:** 4.0% that AAA national regular > $3.10 on 2025-10-31
+**Final Probability:** 0.0% that AAA national regular > $3.10 on 2025-10-31
 _As of 2025-10-30._
-> As of 2025-10-30, we assign 4.0% to AAA National Average Regular > $3.10 on Oct 31, 2025. The posterior mean price is $3.03, blending a prior weight of 0.10. Key adjustments: WPSR tightness: boosted upside pass-through and +3¢ alpha lift.
+> As of 2025-10-30, we assign 0.0% to AAA National Average Regular > $3.10 on Oct 31, 2025. The posterior mean price is $3.03, blending a prior weight of 0.10. Key adjustments: WPSR tightness: boosted upside pass-through and +3¢ alpha lift.
 
 ## Data Sources & Provenance
 | Source | Mode | As Of | Fresh | Records | Path |
@@ -58,8 +58,8 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 | crps_carry | 0.0064 |
 | brier_rbob | 0.4562 |
 | crps_rbob | 0.0816 |
-| brier_prior | 0.3401 |
-| crps_prior | 0.1279 |
+| brier_prior | 0.8728 |
+| crps_prior | 0.1159 |
 | posterior_brier | 0.0051 |
 | prior_weight_calibrated | 0.0000 |
 | posterior_brier_se | 0.0032 |
@@ -72,15 +72,15 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 | Ensemble | 0.0051 | 0.0083 |
 | RBOB Only | 0.4562 | 0.0816 |
 | Carry Forward | 0.0050 | 0.0064 |
-| Kalshi Prior | 0.3401 | 0.1279 |
+| Kalshi Prior | 0.8728 | 0.1159 |
 
 ### Freeze-date Metrics (central threshold)
 | Model | Brier | CRPS |
 | --- | --- | --- |
-| Posterior | 0.0000 | 0.0574 |
+| Posterior | 0.0000 | 0.0587 |
 | Carry Forward | 0.0000 | 0.0050 |
 | RBOB Only | 0.0000 | 0.0071 |
-| Kalshi Prior | 0.3138 | 0.2252 |
+| Kalshi Prior | 0.7468 | 0.2112 |
 
 #### Freeze Snapshot
 | Series | Date | Value (USD/gal) |
@@ -98,9 +98,10 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 | α lift | 0.0000 |
 | β_eff | 0.0000 |
 | Prior weight | 0.10 |
-| Residual σ | 0.0101 |
-| Point forecast | 3.0299 |
-| Tail probability | 3.98% |
+| Effective prior weight | 0.00 |
+| Residual σ | 0.0094 |
+| Point forecast | 3.0301 |
+| Tail probability | 0.00% |
 | WTI proxy | n/a |
 
 ### Calibration Table
@@ -136,17 +137,17 @@ _Horizon-aware T+1 adjustments:_
 | α -$0.02 | 0.0000 | -2.0¢ | +0.00pp |
 
 ### Posterior Snapshot
-- Mean: 3.0299
+- Mean: 3.0301
 - Variance: 0.0001
-- 90% CI: [3.0134, 3.0465] (0.0165 down / 0.0166 up)
-- 80% CI: [3.0171, 3.0427]
+- 90% CI: [3.0144, 3.0453] (0.0156 down / 0.0153 up)
+- 80% CI: [3.0179, 3.0422]
 - Prior weight: 0.10 (calibrated)
-- Asymmetry: Δβ = -0.1237 (95% CI [-0.0612, 0.0260])
-- P(X > 2.90) = 0.9397
-- P(X > 2.95) = 0.9396
-- P(X > 3.00) = 0.9381
-- P(X > 3.05) = 0.0576
-- P(X > 3.10) = 0.0398
+- Asymmetry: Δβ = -0.1237 (95% CI [-0.0664, 0.0302])
+- P(X > 2.90) = 0.9998
+- P(X > 2.95) = 0.9998
+- P(X > 3.00) = 0.9992
+- P(X > 3.05) = 0.0147
+- P(X > 3.10) = 0.0000
 - Dataset digest: dda40006e07ef3dbd3b2dafbeb9e51ef127e00dd806a95889faaa315ee9eab86
 
 
@@ -164,51 +165,51 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 ### Sensitivity Grid (Detail)
 | Threshold | ΔRBOB | ΔAlpha | Prob > Threshold |
 | --- | --- | --- | --- |
-| 2.90 | -0.050 | -0.050 | 0.9396 |
-| 2.90 | -0.050 | 0.000 | 0.9397 |
-| 2.90 | -0.050 | 0.050 | 0.9397 |
-| 2.90 | 0.000 | -0.050 | 0.9396 |
-| 2.90 | 0.000 | 0.000 | 0.9397 |
-| 2.90 | 0.000 | 0.050 | 0.9397 |
-| 2.90 | 0.050 | -0.050 | 0.9396 |
-| 2.90 | 0.050 | 0.000 | 0.9397 |
-| 2.90 | 0.050 | 0.050 | 0.9397 |
-| 2.95 | -0.050 | -0.050 | 0.9381 |
-| 2.95 | -0.050 | 0.000 | 0.9396 |
-| 2.95 | -0.050 | 0.050 | 0.9397 |
-| 2.95 | 0.000 | -0.050 | 0.9381 |
-| 2.95 | 0.000 | 0.000 | 0.9396 |
-| 2.95 | 0.000 | 0.050 | 0.9397 |
-| 2.95 | 0.050 | -0.050 | 0.9381 |
-| 2.95 | 0.050 | 0.000 | 0.9396 |
-| 2.95 | 0.050 | 0.050 | 0.9397 |
-| 3.00 | -0.050 | -0.050 | 0.0576 |
-| 3.00 | -0.050 | 0.000 | 0.9381 |
-| 3.00 | -0.050 | 0.050 | 0.9396 |
-| 3.00 | 0.000 | -0.050 | 0.0576 |
-| 3.00 | 0.000 | 0.000 | 0.9381 |
-| 3.00 | 0.000 | 0.050 | 0.9396 |
-| 3.00 | 0.050 | -0.050 | 0.0576 |
-| 3.00 | 0.050 | 0.000 | 0.9381 |
-| 3.00 | 0.050 | 0.050 | 0.9396 |
-| 3.05 | -0.050 | -0.050 | 0.0398 |
-| 3.05 | -0.050 | 0.000 | 0.0576 |
-| 3.05 | -0.050 | 0.050 | 0.9381 |
-| 3.05 | 0.000 | -0.050 | 0.0398 |
-| 3.05 | 0.000 | 0.000 | 0.0576 |
-| 3.05 | 0.000 | 0.050 | 0.9381 |
-| 3.05 | 0.050 | -0.050 | 0.0398 |
-| 3.05 | 0.050 | 0.000 | 0.0576 |
-| 3.05 | 0.050 | 0.050 | 0.9381 |
-| 3.10 | -0.050 | -0.050 | 0.0398 |
-| 3.10 | -0.050 | 0.000 | 0.0398 |
-| 3.10 | -0.050 | 0.050 | 0.0576 |
-| 3.10 | 0.000 | -0.050 | 0.0398 |
-| 3.10 | 0.000 | 0.000 | 0.0398 |
-| 3.10 | 0.000 | 0.050 | 0.0576 |
-| 3.10 | 0.050 | -0.050 | 0.0398 |
-| 3.10 | 0.050 | 0.000 | 0.0398 |
-| 3.10 | 0.050 | 0.050 | 0.0576 |
+| 2.90 | -0.050 | -0.050 | 0.9998 |
+| 2.90 | -0.050 | 0.000 | 0.9998 |
+| 2.90 | -0.050 | 0.050 | 0.9999 |
+| 2.90 | 0.000 | -0.050 | 0.9998 |
+| 2.90 | 0.000 | 0.000 | 0.9998 |
+| 2.90 | 0.000 | 0.050 | 0.9999 |
+| 2.90 | 0.050 | -0.050 | 0.9998 |
+| 2.90 | 0.050 | 0.000 | 0.9998 |
+| 2.90 | 0.050 | 0.050 | 0.9999 |
+| 2.95 | -0.050 | -0.050 | 0.9992 |
+| 2.95 | -0.050 | 0.000 | 0.9998 |
+| 2.95 | -0.050 | 0.050 | 0.9998 |
+| 2.95 | 0.000 | -0.050 | 0.9992 |
+| 2.95 | 0.000 | 0.000 | 0.9998 |
+| 2.95 | 0.000 | 0.050 | 0.9998 |
+| 2.95 | 0.050 | -0.050 | 0.9992 |
+| 2.95 | 0.050 | 0.000 | 0.9998 |
+| 2.95 | 0.050 | 0.050 | 0.9998 |
+| 3.00 | -0.050 | -0.050 | 0.0147 |
+| 3.00 | -0.050 | 0.000 | 0.9992 |
+| 3.00 | -0.050 | 0.050 | 0.9998 |
+| 3.00 | 0.000 | -0.050 | 0.0147 |
+| 3.00 | 0.000 | 0.000 | 0.9992 |
+| 3.00 | 0.000 | 0.050 | 0.9998 |
+| 3.00 | 0.050 | -0.050 | 0.0147 |
+| 3.00 | 0.050 | 0.000 | 0.9992 |
+| 3.00 | 0.050 | 0.050 | 0.9998 |
+| 3.05 | -0.050 | -0.050 | 0.0000 |
+| 3.05 | -0.050 | 0.000 | 0.0147 |
+| 3.05 | -0.050 | 0.050 | 0.9992 |
+| 3.05 | 0.000 | -0.050 | 0.0000 |
+| 3.05 | 0.000 | 0.000 | 0.0147 |
+| 3.05 | 0.000 | 0.050 | 0.9992 |
+| 3.05 | 0.050 | -0.050 | 0.0000 |
+| 3.05 | 0.050 | 0.000 | 0.0147 |
+| 3.05 | 0.050 | 0.050 | 0.9992 |
+| 3.10 | -0.050 | -0.050 | 0.0000 |
+| 3.10 | -0.050 | 0.000 | 0.0000 |
+| 3.10 | -0.050 | 0.050 | 0.0147 |
+| 3.10 | 0.000 | -0.050 | 0.0000 |
+| 3.10 | 0.000 | 0.000 | 0.0000 |
+| 3.10 | 0.000 | 0.050 | 0.0147 |
+| 3.10 | 0.050 | -0.050 | 0.0000 |
+| 3.10 | 0.050 | 0.000 | 0.0000 |
+| 3.10 | 0.050 | 0.050 | 0.0147 |
 
 ## Appendix: Meta Files
 - data_proc/meta/aaa.json
@@ -216,4 +217,4 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 - data_proc/meta/kalshi.json
 - data_proc/meta/rbob.json
 - data_proc/meta/dataset.json
-- Submission SHA: 30515af6fe53a323314cbf25fe2963f66630c459
+- Submission SHA: d27c0b86ae5fafc742e6cd78e8c748907df852ed
