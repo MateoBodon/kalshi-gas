@@ -101,7 +101,7 @@ def build_deck(output_path: Path) -> Path:
         _slide(
             "5. Evidence",
             [
-                "- Posterior P(≥$3.15): refer to sensitivity chart.",
+                "- Posterior P(>$3.15): refer to sensitivity chart.",
                 f"- Jackknife stability: {jackknife}"
                 if jackknife
                 else "- Jackknife stability within tolerance.",

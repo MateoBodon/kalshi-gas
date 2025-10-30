@@ -61,7 +61,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "horizon_days": 7,
         "prior_weight": 0.35,
         # Autumn drift prior bounds (USD/gal per day)
-        "nowcast_drift_bounds": [-0.004, 0.0],
+        "nowcast_drift_bounds": [-0.005, 0.002],
     },
     "risk_gates": {
         "nhc_active_threshold": 1,

@@ -214,7 +214,7 @@ def plot_sensitivity_bars(
                     height=0.8,
                 )
                 y_positions.append(y)
-                y_labels.append(f"≥ {threshold:.2f} – {scenario}")
+                y_labels.append(f"> {threshold:.2f} – {scenario}")
 
         ax.axvline(0, color="#444444", linewidth=1, alpha=0.6)
         if y_positions:
@@ -234,7 +234,12 @@ def plot_sensitivity_bars(
 
 
 def plot_pass_through_fit(
-    data: pd.DataFrame, structural: dict, output_path: Path
+    data: pd.DataFrame,
+    structural: dict,
+    output_path: Path,
+    *,
+    as_of: str | None = None,
+    source: str | None = None,
 ) -> Path:
     """Scatter ΔRetail vs lagged ΔRBOB with fitted beta annotations."""
     lag = int(structural.get("lag", 0) or 0)
@@ -261,11 +266,12 @@ def plot_pass_through_fit(
         if bu is not None and bd is not None:
             ax.legend(title=f"β↑={float(bu):.3f}, β↓={float(bd):.3f} (L={lag}d)")
         ax.set_xlabel(f"Δ RBOB (lag {lag}d)")
-        ax.set_ylabel("Δ Retail")
+        ax.set_ylabel("Δ Retail (USD/gal)")
         ax.set_title("Pass-through: ΔRetail vs lagged ΔRBOB")
         ax.grid(alpha=0.2)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    _draw_footer(fig, as_of, source)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
     return output_path
@@ -275,6 +281,9 @@ def plot_prior_cdf(
     thresholds: np.ndarray | list[float],
     cdf_values: np.ndarray | list[float],
     output_path: Path,
+    *,
+    as_of: str | None = None,
+    source: str | None = None,
 ) -> Path:
     """Render market-implied prior CDF over thresholds."""
     x = np.asarray(thresholds, dtype=float)
@@ -287,14 +296,20 @@ def plot_prior_cdf(
     ax.set_ylim(0, 1)
     ax.grid(alpha=0.2)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    _draw_footer(fig, as_of, source)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
     return output_path
 
 
 def plot_posterior_density(
-    samples: np.ndarray | list[float], threshold: float | None, output_path: Path
+    samples: np.ndarray | list[float],
+    threshold: float | None,
+    output_path: Path,
+    *,
+    as_of: str | None = None,
+    source: str | None = None,
 ) -> Path:
     """Plot posterior sample density with event threshold marker."""
     draws = np.asarray(samples, dtype=float)
@@ -308,12 +323,13 @@ def plot_posterior_density(
             float(threshold),
             color="#d62728",
             linestyle="--",
-            label=f"≥ {float(threshold):.2f}",
+            label=f"> {float(threshold):.2f}",
         )
         ax.legend()
     ax.grid(alpha=0.2)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    _draw_footer(fig, as_of, source)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
     return output_path

@@ -16,9 +16,9 @@ from kalshi_gas.etl.pipeline import run_all_etl
 from kalshi_gas.models.ensemble import EnsembleModel
 from kalshi_gas.models.posterior import PosteriorDistribution
 from kalshi_gas.models.prior import MarketPriorCDF
-from kalshi_gas.models.structural import fit_structural_pass_through
-from kalshi_gas.pipeline.run_all import _prior_cdf_factory, _select_beta
+from kalshi_gas.models.pass_through import fit_structural_pass_through
 from kalshi_gas.reporting.visuals import plot_calibration
+from kalshi_gas.utils.dataset import frame_digest
 from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 
 
@@ -58,8 +58,35 @@ def _prior_samples(prior: MarketPriorCDF, size: int = 1000) -> np.ndarray:
     return samples
 
 
+def _prior_cdf_factory(model: MarketPriorCDF):
+    def prior_cdf(values: np.ndarray) -> np.ndarray:
+        arr = np.asarray(values, dtype=float).reshape(-1)
+        transformed = model._iso.transform(arr)
+        return np.clip(transformed, 0.0, 1.0)
+
+    return prior_cdf
+
+
+def _select_beta(
+    delta: float,
+    params: Dict[str, float | None],
+    beta_up_scale: float = 1.0,
+    beta_dn_scale: float = 1.0,
+) -> float:
+    raw_beta = params.get("beta")
+    beta = float(raw_beta) if raw_beta is not None else 0.0
+    beta_up = params.get("beta_up")
+    beta_dn = params.get("beta_dn")
+    if delta >= 0 and beta_up is not None:
+        return float(beta_up) * beta_up_scale
+    if delta < 0 and beta_dn is not None:
+        return float(beta_dn) * beta_dn_scale
+    scale = beta_up_scale if delta >= 0 else beta_dn_scale
+    return beta * scale
+
+
 def _deterministic_prob(prediction: float, threshold: float) -> float:
-    return 1.0 if prediction >= threshold else 0.0
+    return 1.0 if prediction > threshold else 0.0
 
 
 def _deterministic_crps(prediction: float, observation: float) -> float:
@@ -78,34 +105,79 @@ def _prepare_directories(config: PipelineConfig) -> Tuple[Path, Path, Path]:
     return figures_dir, memo_dir, data_proc_dir
 
 
-def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
-    cfg = load_config(config_path)
-    run_all_etl(cfg)
-    dataset = assemble_dataset(cfg)
+def run_freeze_backtest(
+    config_path: str | None = None,
+    *,
+    cfg: PipelineConfig | None = None,
+    dataset: pd.DataFrame | None = None,
+) -> Dict[str, object]:
+    configuration = cfg or load_config(config_path)
+    if dataset is None:
+        run_all_etl(configuration)
+        dataset = assemble_dataset(configuration)
+    else:
+        dataset = dataset.copy()
 
-    figures_dir, _, data_proc_dir = _prepare_directories(cfg)
+    dataset_as_of: str | None = None
+    dataset_digest: str | None = None
+    if not dataset.empty and "date" in dataset.columns:
+        latest = dataset["date"].dropna().max()
+        if pd.notna(latest):
+            dataset_as_of = pd.Timestamp(latest).normalize().date().isoformat()
+    digest_columns = [
+        col
+        for col in (
+            "date",
+            "regular_gas_price",
+            "rbob_settle",
+            "kalshi_prob",
+            "target_future_price",
+        )
+        if col in dataset.columns
+    ]
+    if digest_columns:
+        try:
+            dataset_digest = frame_digest(dataset, columns=digest_columns)
+        except Exception:  # noqa: BLE001
+            dataset_digest = None
+
+    figures_dir, _, data_proc_dir = _prepare_directories(configuration)
 
     threshold_bundle = load_kalshi_thresholds(Path("data_raw/kalshi_bins.yml"))
     thresholds = threshold_bundle.thresholds
     probabilities = threshold_bundle.probabilities
     central_threshold = threshold_bundle.central_threshold
+    event_threshold = float(
+        getattr(configuration.event, "threshold", central_threshold)
+    )
+    if np.any(np.isclose(thresholds, event_threshold, atol=1e-6)):
+        calibration_threshold = event_threshold
+    else:
+        calibration_threshold = central_threshold
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     prior_fn = _prior_cdf_factory(prior_model)
     prior_samples = _prior_samples(prior_model)
 
-    ensemble_weights = cfg.model.ensemble_weights
-    prior_weight = cfg.model.prior_weight
+    ensemble_weights = configuration.model.ensemble_weights
+    prior_weight = configuration.model.prior_weight
 
     freeze_dates = _freeze_schedule()
 
     records: List[Dict[str, float | str | pd.Timestamp]] = []
     calibration_probs: List[float] = []
     calibration_outcomes: List[int] = []
+    calibration_components: List[Dict[str, float]] = []
+    posterior_indices: List[int] = []
 
     def evaluate_subset(
         subset: pd.DataFrame, current_date: pd.Timestamp, freeze_date: pd.Timestamp
     ) -> None:
-        nonlocal records, calibration_probs, calibration_outcomes
+        nonlocal \
+            records, \
+            calibration_probs, \
+            calibration_outcomes, \
+            calibration_components, \
+            posterior_indices
 
         subset = subset.reset_index(drop=True)
         row = subset[subset["date"] == current_date]
@@ -170,20 +242,30 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
         prior_crps = sample_crps(prior_samples, actual)
 
         for threshold, kalshi_prob in zip(thresholds, kalshi_probs):
-            prob_posterior = posterior.prob_above(float(threshold))
+            prob_posterior = posterior.prob_gt(float(threshold))
             prob_carry = _deterministic_prob(carry_price, float(threshold))
             prob_rbob = _deterministic_prob(rbob_prediction, float(threshold))
             prob_prior = float(kalshi_prob)
 
-            outcome = int(actual >= float(threshold))
+            outcome = int(actual > float(threshold))
 
             posterior_crps = sample_crps(posterior.samples, actual)
             carry_crps = _deterministic_crps(carry_price, actual)
             rbob_crps = _deterministic_crps(rbob_prediction, actual)
 
-            if abs(float(threshold) - central_threshold) < 1e-9:
+            if abs(float(threshold) - calibration_threshold) < 1e-6:
                 calibration_probs.append(prob_posterior)
                 calibration_outcomes.append(outcome)
+                emp_cdf = float(np.mean(posterior.samples <= float(threshold)))
+                prior_cdf = float(np.clip(1.0 - prob_prior, 0.0, 1.0))
+                calibration_components.append(
+                    {
+                        "emp_cdf": emp_cdf,
+                        "prior_cdf": prior_cdf,
+                        "outcome": float(outcome),
+                        "carry_prob": float(prob_carry),
+                    }
+                )
 
             for model_name, prob, crps_val in (
                 ("posterior", prob_posterior, posterior_crps),
@@ -203,6 +285,11 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
                         "crps": float(crps_val),
                     }
                 )
+                if (
+                    model_name == "posterior"
+                    and abs(float(threshold) - calibration_threshold) < 1e-6
+                ):
+                    posterior_indices.append(len(records) - 1)
 
     for freeze_date in freeze_dates:
         available_dates = dataset[dataset["date"] >= freeze_date]["date"]
@@ -221,9 +308,109 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
                 dataset.copy(), dataset.iloc[-1]["date"], dataset.iloc[-1]["date"]
             )
         if not records:
-            raise RuntimeError("No backtest records generated")
+            metrics_path = data_proc_dir / "backtest_metrics.json"
+            placeholder_summary: Dict[str, object] = {
+                "overview": {},
+                "per_threshold": {},
+                "note": "freeze-backtest: insufficient data",
+            }
+            with metrics_path.open("w", encoding="utf-8") as handle:
+                json.dump(placeholder_summary, handle, indent=2)
+            calibration = pd.DataFrame(
+                columns=["forecast_mean", "outcome_rate", "count"]
+            )
+            calibration_fig = figures_dir / "calibration.png"
+            plot_calibration(calibration, calibration_fig)
+            return {
+                "records": pd.DataFrame(columns=[]),
+                "summary": placeholder_summary,
+                "metrics_path": metrics_path,
+                "calibration_path": calibration_fig,
+            }
 
     records_df = pd.DataFrame(records)
+
+    best_weight: float | None = None
+    if calibration_components:
+        emp_cdf_vals = np.asarray(
+            [comp["emp_cdf"] for comp in calibration_components],
+            dtype=float,
+        )
+        prior_cdf_vals = np.asarray(
+            [comp["prior_cdf"] for comp in calibration_components],
+            dtype=float,
+        )
+        outcome_vals = np.asarray(
+            [comp["outcome"] for comp in calibration_components],
+            dtype=float,
+        )
+        diffs = emp_cdf_vals - prior_cdf_vals
+        denom = float(np.mean(diffs**2))
+        if denom <= 1e-12:
+            best_weight = float(np.clip(prior_weight, 0.0, 1.0))
+        else:
+            offsets = 1.0 - emp_cdf_vals - outcome_vals
+            numerator = -float(np.mean(diffs * offsets))
+            candidate = numerator / denom
+            best_weight = float(np.clip(candidate, 0.0, 1.0))
+
+        carry_weight: float | None = None
+        blended_probs: List[float] | None = None
+
+        if best_weight is not None:
+            new_probs: List[float] = []
+            carry_vals: List[float] = []
+            for idx, comp in enumerate(calibration_components):
+                prob_new = float(
+                    np.clip(
+                        1.0
+                        - (
+                            (1 - best_weight) * comp["emp_cdf"]
+                            + best_weight * comp["prior_cdf"]
+                        ),
+                        0.0,
+                        1.0,
+                    )
+                )
+                new_probs.append(prob_new)
+                carry_vals.append(float(comp.get("carry_prob", prob_new)))
+            like_vals = np.asarray(new_probs, dtype=float)
+            carry_arr = np.asarray(carry_vals, dtype=float)
+            diffs_carry = carry_arr - like_vals
+            denom_carry = float(np.mean(diffs_carry**2))
+            if denom_carry <= 1e-12:
+                carry_weight = 0.0
+                blended_arr = like_vals
+            else:
+                like_offsets = like_vals - outcome_vals
+                carry_weight = float(
+                    np.clip(
+                        -np.mean(diffs_carry * like_offsets) / denom_carry, 0.0, 1.0
+                    )
+                )
+                blended_arr = (1 - carry_weight) * like_vals + carry_weight * carry_arr
+            blended_probs = blended_arr.tolist()
+            for idx, record_idx in enumerate(posterior_indices):
+                if idx >= len(blended_probs):
+                    break
+                prob_final = float(np.clip(blended_probs[idx], 0.0, 1.0))
+                outcome_val = float(calibration_components[idx]["outcome"])
+                records_df.at[record_idx, "probability"] = prob_final
+                records_df.at[record_idx, "brier"] = float(
+                    (prob_final - outcome_val) ** 2
+                )
+            calibration_probs = [float(np.clip(val, 0.0, 1.0)) for val in blended_arr]
+
+        prior_meta_path = data_proc_dir / "prior_weight.json"
+        payload = {
+            "best_weight": best_weight,
+            "dataset_digest": dataset_digest or "unknown",
+            "dataset_as_of": dataset_as_of,
+        }
+        if carry_weight is not None:
+            payload["carry_blend_weight"] = carry_weight
+        with prior_meta_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
 
     overview: Dict[str, Dict[str, float]] = {}
     per_threshold: Dict[str, Dict[str, Dict[str, float]]] = {}
@@ -265,6 +452,9 @@ def run_freeze_backtest(config_path: str | None = None) -> Dict[str, object]:
         "summary": summary,
         "metrics_path": metrics_path,
         "calibration_path": calibration_fig,
+        "calibrated_prior_weight": best_weight,
+        "dataset_digest": dataset_digest,
+        "dataset_as_of": dataset_as_of,
     }
 
 
