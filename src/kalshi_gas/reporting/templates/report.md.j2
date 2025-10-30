@@ -125,9 +125,18 @@ _{{ figure_footer }}_
 | β_eff | {{ "%.4f"|format(freeze_metrics.get('beta_eff')|default(0.0, true)) }} |
 | Prior weight | {{ "%.2f"|format(freeze_metrics.get('prior_weight')|default(0.0, true)) }} |
 | Effective prior weight | {{ "%.2f"|format(freeze_metrics.get('prior_weight_effective')|default(0.0, true)) }} |
+{% set gap = freeze_metrics.get('price_gap') %}
+{% set sigma = freeze_metrics.get('residual_sigma') %}
+| Gap z-score | {% if sigma and sigma != 0 %}{{ "%.1f"|format((gap|default(0.0, true)) / sigma) }}σ{% else %}n/a{% endif %} |
 | Residual σ | {{ "%.4f"|format(freeze_metrics.get('residual_sigma')|default(0.0, true)) }} |
 | Point forecast | {{ "%.4f"|format(freeze_metrics.get('point_forecast')|default(0.0, true)) }} |
-| Tail probability | {{ "%.2f"|format((freeze_metrics.get('tail_probability')|default(0.0, true)) * 100) }}% |
+{% set tail_prob = freeze_metrics.get('tail_probability') %}
+{% if tail_prob is none %}
+| Tail probability | n/a |
+{% else %}
+{% set tail_pct = tail_prob * 100 %}
+| Tail probability | {% if tail_pct < 0.10 %}<0.10%{% else %}{{ "%.2f"|format(tail_pct) }}%{% endif %} |
+{% endif %}
 | WTI proxy | {{ freeze_metrics.get('wti_proxy') if freeze_metrics.get('wti_proxy') is not none else 'n/a' }} |
 {% endif %}
 {% if jackknife %}
