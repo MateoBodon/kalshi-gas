@@ -8,7 +8,10 @@ from pathlib import Path
 import numpy as np
 
 from kalshi_gas.models.posterior import PosteriorDistribution
-from kalshi_gas.pipeline.run_all import _beta_scale_for_horizon
+from kalshi_gas.pipeline.run_all import (
+    _apply_alpha_beta_adjustments,
+    _beta_scale_for_horizon,
+)
 from kalshi_gas.utils.sigma import load_residual_sigma
 
 
@@ -28,6 +31,24 @@ def test_posterior_mean_matches_nowcast_when_prior_zero() -> None:
 def test_beta_scale_zero_when_one_day() -> None:
     beta_eff = 0.25 * _beta_scale_for_horizon(days_to_event=1, lag_min=7)
     assert beta_eff <= 1e-3
+
+
+def test_alpha_lift_clamped_when_one_day() -> None:
+    structural = {"beta": 0.2, "beta_up": 0.25, "beta_dn": 0.15}
+    beta_scale = _beta_scale_for_horizon(days_to_event=1, lag_min=7)
+    alpha_lift, beta_params = _apply_alpha_beta_adjustments(
+        tightness_alpha_lift=0.03,
+        nhc_alpha_lift=0.02,
+        days_to_event=1,
+        beta_horizon_scale=beta_scale,
+        structural_params=structural,
+    )
+    freeze_metrics = {
+        "alpha_lift": float(alpha_lift),
+        "beta_eff": float(beta_params.get("beta") or 0.0),
+    }
+    assert freeze_metrics["alpha_lift"] == 0.0
+    assert freeze_metrics["beta_eff"] == 0.0
 
 
 def test_sigma_loader_prefers_file(tmp_path: Path) -> None:

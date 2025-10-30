@@ -113,6 +113,29 @@ def _beta_scale_for_horizon(days_to_event: int | None, lag_min: int) -> float:
     return 1.0
 
 
+def _apply_alpha_beta_adjustments(
+    tightness_alpha_lift: float,
+    nhc_alpha_lift: float,
+    days_to_event: int | None,
+    beta_horizon_scale: float,
+    structural_params: Dict[str, float | None],
+) -> tuple[float, Dict[str, float | None]]:
+    """Clamp alpha at D<=1 and scale beta coefficients for the active horizon."""
+
+    alpha_lift_applied = tightness_alpha_lift + nhc_alpha_lift
+    if days_to_event is not None and days_to_event <= 1:
+        alpha_lift_applied = 0.0
+
+    scaled_params: Dict[str, float | None] = dict(structural_params)
+    for key in ("beta", "beta_up", "beta_dn"):
+        val = scaled_params.get(key)
+        if val is None:
+            continue
+        scaled_params[key] = float(val) * beta_horizon_scale
+
+    return alpha_lift_applied, scaled_params
+
+
 def _force_rebuild_directories(cfg: PipelineConfig) -> None:
     targets = [
         cfg.data.processed_dir,
@@ -402,7 +425,6 @@ def run_pipeline(
         risk_adjustments.append(
             "NHC risk: widened nowcast drift and tilted upside beta"
         )
-    alpha_shift = 0.0
 
     risk_flags = {
         "tightness": {
@@ -539,10 +561,6 @@ def run_pipeline(
     beta_horizon_scale = _beta_scale_for_horizon(days_to_event, lag_min)
     if tightness_alpha_lift > 0.0 and days_to_event is not None and days_to_event <= 2:
         tightness_alpha_lift *= beta_horizon_scale
-    alpha_shift = tightness_alpha_lift + nhc_alpha_lift
-    if days_to_event is not None and days_to_event <= 1:
-        alpha_shift = 0.0
-    alpha_lift_applied = alpha_shift
     # Apply configured drift bounds first, then risk-induced drift bump (upper widening)
     try:
         cfg_bounds = getattr(cfg.model, "nowcast_drift_bounds", None)
@@ -618,11 +636,15 @@ def run_pipeline(
         pass
     nowcast_sim = live_ensemble.nowcast.simulate()
 
-    beta_eff = 0.0
     structural = fit_structural_pass_through(dataset_for_model, asymmetry=True)
-    raw_beta = structural.get("beta")
-    beta_base = float(raw_beta) if raw_beta is not None else 0.0
-    beta_eff = beta_base * beta_horizon_scale
+    alpha_lift_applied, beta_params_horizon = _apply_alpha_beta_adjustments(
+        tightness_alpha_lift,
+        nhc_alpha_lift,
+        days_to_event,
+        beta_horizon_scale,
+        structural,
+    )
+    beta_eff = float(beta_params_horizon.get("beta") or 0.0)
     days_display = days_to_event if days_to_event is not None else "n/a"
     print(
         "[run_pipeline] horizon gating: "
@@ -702,18 +724,15 @@ def run_pipeline(
     def posterior_factory(
         rbob_delta: float, alpha_delta: float
     ) -> PosteriorDistribution:
-        beta_effect = (
-            _select_beta(
-                rbob_delta,
-                structural,
-                beta_up_scale=beta_up_scale,
-                beta_dn_scale=beta_dn_scale,
-            )
-            * beta_horizon_scale
+        beta_effect = _select_beta(
+            rbob_delta,
+            beta_params_horizon,
+            beta_up_scale=beta_up_scale,
+            beta_dn_scale=beta_dn_scale,
         )
         adjusted = (
             base_samples
-            + alpha_shift
+            + alpha_lift_applied
             + alpha_dynamic_offset
             + alpha_delta
             + beta_effect * rbob_delta
