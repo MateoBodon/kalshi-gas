@@ -51,6 +51,21 @@ def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
     for df in (aaa, rbob, eia, kalshi):
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
+    latest_aaa_raw = aaa["date"].dropna().max()
+    event_ts = pd.Timestamp(config.event.resolution_date)
+    latest_aaa_ts: pd.Timestamp | None
+    if pd.isna(latest_aaa_raw):
+        latest_aaa_ts = None
+        days_to_event = None
+        horizon_days = max(1, int(config.model.horizon_days))
+    else:
+        latest_aaa_ts = pd.Timestamp(latest_aaa_raw).normalize()
+        if latest_aaa_ts >= event_ts:
+            latest_aaa_ts = (event_ts - pd.Timedelta(days=1)).normalize()
+        delta_days = int((event_ts - latest_aaa_ts).days)
+        days_to_event = max(0, delta_days)
+        horizon_days = max(1, delta_days)
+
     merged = aaa.copy()
 
     # RBOB join (tolerance 10 days)
@@ -94,11 +109,14 @@ def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
     dataset["lag_1"] = dataset["regular_gas_price"].shift(1)
     dataset["lag_7"] = dataset["regular_gas_price"].shift(7)
     dataset["lag_14"] = dataset["regular_gas_price"].shift(14)
-    dataset["target_future_price"] = dataset["regular_gas_price"].shift(
-        -config.model.horizon_days
-    )
+    dataset["target_future_price"] = dataset["regular_gas_price"].shift(-horizon_days)
     dataset.dropna(inplace=True)
     dataset = dataset.reset_index(drop=True)
+    dataset.attrs["latest_aaa_date"] = (
+        latest_aaa_ts.date().isoformat() if latest_aaa_ts is not None else None
+    )
+    dataset.attrs["days_to_event"] = days_to_event
+    dataset.attrs["horizon_days"] = horizon_days
 
     meta_dir = Path("data_proc") / "meta"
     latest_date = dataset["date"].max() if not dataset.empty else None
@@ -117,6 +135,11 @@ def assemble_dataset(config: PipelineConfig) -> pd.DataFrame:
             str(eia_path),
             str(kalshi_path),
         ],
+        "latest_aaa_date": (
+            latest_aaa_ts.date().isoformat() if latest_aaa_ts is not None else None
+        ),
+        "days_to_event": days_to_event,
+        "horizon_days": horizon_days,
     }
     write_meta(meta_dir / "dataset.json", meta_payload)
 

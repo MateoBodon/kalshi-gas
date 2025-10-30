@@ -3,6 +3,21 @@
 Generated on {{ metadata.generated_at }}
 Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]({{ path }}){% if not loop.last %}, {% endif %}{% endfor %}{% else %}n/a{% endif %}
 
+## Headline Call
+{% set event_ctx = risk_context.get('event', {}) if risk_context else {} %}
+{% set headline_threshold = posterior.final_threshold %}
+{% set headline_pct = posterior.final_probability_pct %}
+{% set headline_prob = posterior.final_probability %}
+{% set headline_date = event_ctx.get('resolution_date') %}
+{% if headline_prob is not none and headline_threshold is not none %}
+**Final Probability:** {{ "%.1f"|format(headline_pct or (headline_prob * 100)) }}% that AAA national regular > ${{ "%.2f"|format(headline_threshold) }}{% if headline_date %} on {{ headline_date }}{% endif %}
+{% else %}
+**Final Probability:** n/a
+{% endif %}
+
+_As of {{ as_of_label }}._
+{{ posterior.thesis or "No thesis available." }}
+
 ## Data Sources & Provenance
 | Source | Mode | As Of | Fresh | Records | Path |
 | --- | --- | --- | --- | --- | --- |
@@ -38,12 +53,15 @@ Provenance sidecars: {% if meta_files %}{% for path in meta_files %}[{{ path }}]
 ### Risk Metrics
 | Metric | Value | Trigger |
 | --- | --- | --- |
-| WPSR draw (mmbbl) | {{ "%.2f"|format(wpsr.get("draw_mmb", 0.0)) }} | ≥ {{ "%.2f"|format(-wpsr.get("draw_trigger", 0.0)) }} |
+| WPSR draw (mmbbl) | {{ "%.2f"|format(wpsr.get("draw_mmb", 0.0)) }} | > {{ "%.2f"|format(-wpsr.get("draw_trigger", 0.0)) }} |
 | Refinery utilisation (%) | {{ "%.1f"|format(wpsr.get("refinery_util_pct", 0.0)) }} | < {{ "%.1f"|format(wpsr.get("util_trigger", 90.0)) }} |
-| NHC active storms | {{ nhc.get("active_storms", 0) }} | ≥ {{ nhc.get("threshold", 1) }} |
+| NHC active storms | {{ nhc.get("active_storms", 0) }} | > {{ nhc.get("threshold", 1) }} |
 | Analyst override | {{ "ON" if nhc.get("analyst_flag") else "OFF" }} | Manual |
 | Event date | {{ event_ctx.get("resolution_date", "n/a") }} | — |
 | Event threshold (USD/gal) | {{ "%.2f"|format(event_ctx.get("threshold", 0.0)) }} | — |
+| Days to event | {{ event_ctx.get("days_to_event", "n/a") }} | — |
+| β_eff (Δpump / ΔRBOB) | {% if event_ctx.get("beta_eff") is not none %}{{ "%.4f"|format(event_ctx.get("beta_eff")) }}{% else %}n/a{% endif %} | — |
+| Alpha lift applied (USD/gal) | {% if event_ctx.get("alpha_lift_applied") is not none %}{{ "%.4f"|format(event_ctx.get("alpha_lift_applied")) }}{% else %}n/a{% endif %} | — |
 {% if adjustments %}
 | Tail adjustments | {{ adjustments[0] }}{% for note in adjustments[1:] %}; {{ note }}{% endfor %} | — |
 {% else %}
@@ -114,8 +132,8 @@ _{{ figure_footer }}_
 {% if asymmetry_ci %}
 - Asymmetry: Δβ = {{ "%.4f"|format(asymmetry_ci[0]) }} (95% CI [{{ "%.4f"|format(asymmetry_ci[1]) }}, {{ "%.4f"|format(asymmetry_ci[2]) }}])
 {% endif %}
-{% for key, value in posterior.items() if key.startswith("prob_ge_") -%}
-- {{ key }}: {{ "%.4f"|format(value) }}
+{% for key, value in posterior.items() if key.startswith("prob_gt_") -%}
+- P(X > {{ key[8:] }}) = {{ "%.4f"|format(value) }}
 {% endfor %}
 {% if posterior.dataset_digest %}
 - Dataset digest: {{ posterior.dataset_digest }}
@@ -139,7 +157,7 @@ _{{ figure_footer }}_
 _{{ figure_footer }}_
 
 ### Sensitivity Grid (Detail)
-| Threshold | ΔRBOB | ΔAlpha | Prob ≥ Threshold |
+| Threshold | ΔRBOB | ΔAlpha | Prob > Threshold |
 | --- | --- | --- | --- |
 {% for row in sensitivity -%}
 | {{ "%.2f"|format(row["threshold"]) }} | {{ "%.3f"|format(row["rbob_delta"]) }} | {{ "%.3f"|format(row["alpha_delta"]) }} | {{ "%.4f"|format(row["prob_above"]) }} |

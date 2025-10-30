@@ -39,23 +39,54 @@ class PosteriorDistribution:
         self.sorted_samples = np.sort(self.samples)
         self.empirical_size = float(len(self.sorted_samples))
         self.prior_weight = _validate_prior_weight(self.prior_weight)
+        self._cdf_grid, self._mixture_cdf_values = self._build_mixture_cdf()
+        self._prob_cache: dict[float, float] = {}
 
     def _empirical_cdf(self, thresholds: np.ndarray) -> np.ndarray:
         indices = np.searchsorted(self.sorted_samples, thresholds, side="right")
         return indices / self.empirical_size
 
-    def cdf(self, thresholds: Sequence[float] | float) -> np.ndarray | float:
-        values = _ensure_array(thresholds)
-        empirical = self._empirical_cdf(values)
-        prior = np.clip(self.prior_cdf(values), 0.0, 1.0)
+    def _build_mixture_cdf(self) -> tuple[np.ndarray, np.ndarray]:
+        # Extend support slightly beyond sample range to guarantee limits of 0/1.
+        span = float(self.sorted_samples[-1] - self.sorted_samples[0])
+        buffer = max(0.25, 0.1 * span)
+        lower = self.sorted_samples[0] - buffer
+        upper = self.sorted_samples[-1] + buffer
+        grid = np.concatenate(
+            (
+                np.array([lower], dtype=float),
+                np.unique(self.sorted_samples),
+                np.array([upper], dtype=float),
+            )
+        )
+        empirical = self._empirical_cdf(grid)
+        prior = np.clip(self.prior_cdf(grid), 0.0, 1.0)
         mixture = (1 - self.prior_weight) * empirical + self.prior_weight * prior
         mixture = np.clip(mixture, 0.0, 1.0)
+        # Ensure monotonicity after numerical mixing.
+        mixture = np.maximum.accumulate(mixture)
+        return grid, mixture
+
+    def cdf(self, thresholds: Sequence[float] | float) -> np.ndarray | float:
+        values = _ensure_array(thresholds)
+        mixture = np.interp(
+            values,
+            self._cdf_grid,
+            self._mixture_cdf_values,
+            left=0.0,
+            right=1.0,
+        )
         if np.ndim(thresholds) == 0:
             return float(mixture[0])
         return mixture
 
     def prob_above(self, threshold: float) -> float:
-        return float(1 - self.cdf(threshold))
+        cached = self._prob_cache.get(float(threshold))
+        if cached is not None:
+            return cached
+        value = float(1 - self.cdf(threshold))
+        self._prob_cache[float(threshold)] = value
+        return value
 
     @property
     def mean(self) -> float:
@@ -95,6 +126,20 @@ class PosteriorDistribution:
             "ci_lower_span": lower_offset,
             "ci_upper_span": upper_offset,
         }
+
+    @classmethod
+    def from_components(
+        cls,
+        samples: Sequence[float] | np.ndarray,
+        prior_cdf: CDFCallable,
+        prior_weight: float = 0.35,
+    ) -> "PosteriorDistribution":
+        """Convenience constructor mirroring the primary initializer."""
+        return cls(
+            samples=np.asarray(samples, dtype=float),
+            prior_cdf=prior_cdf,
+            prior_weight=prior_weight,
+        )
 
 
 def compute_sensitivity(

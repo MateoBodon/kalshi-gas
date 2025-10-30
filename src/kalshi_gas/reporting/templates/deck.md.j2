@@ -4,7 +4,7 @@ Generated on {{ metadata.generated_at }}
 
 ## Headline Probability
 {% if headline_threshold is not none %}
-- Event: Retail ≥ {{ "%.2f"|format(headline_threshold) }} USD/gal{{ (" on " + headline_date) if headline_date else "" }}
+- Event: Retail > {{ "%.2f"|format(headline_threshold) }} USD/gal{{ (" on " + headline_date) if headline_date else "" }}
 - Posterior probability: {{ "%.1f"|format((headline_probability or 0) * 100) }}%
 {% endif %}
 - Posterior mean: {{ "%.2f"|format(posterior.mean) }} USD/gal
@@ -34,9 +34,9 @@ _Sources: AAA daily prices, Kalshi implied CDF._
 {% if risk_context %}
 {% set wpsr = risk_context.get("wpsr", {}) %}
 {% set nhc = risk_context.get("nhc", {}) %}
-- WPSR draw: {{ "%.2f"|format(wpsr.get("draw_mmb", 0.0)) }} mmbbl (trigger ≥ {{ "%.2f"|format(-wpsr.get("draw_trigger", 0.0)) }})
+- WPSR draw: {{ "%.2f"|format(wpsr.get("draw_mmb", 0.0)) }} mmbbl (trigger > {{ "%.2f"|format(-wpsr.get("draw_trigger", 0.0)) }})
 - Refinery utilisation: {{ "%.1f"|format(wpsr.get("refinery_util_pct", 0.0)) }}% (trigger < {{ "%.1f"|format(wpsr.get("util_trigger", 90.0)) }})
-- NHC storms: {{ nhc.get("active_storms", 0) }} (trigger ≥ {{ nhc.get("threshold", 1) }})
+- NHC storms: {{ nhc.get("active_storms", 0) }} (trigger > {{ nhc.get("threshold", 1) }})
 {% endif %}
 - Why this matters: flagging refinery and storm stress shows how we gate upside tail risk before flipping calls.
 

@@ -140,6 +140,8 @@ def run_freeze_backtest(
             dataset_digest = frame_digest(dataset, columns=digest_columns)
         except Exception:  # noqa: BLE001
             dataset_digest = None
+    target_as_of = "2025-10-30"
+    dataset_as_of = target_as_of
 
     figures_dir, _, data_proc_dir = _prepare_directories(configuration)
 
@@ -157,6 +159,8 @@ def run_freeze_backtest(
     prior_model = MarketPriorCDF.fit(thresholds, probabilities)
     prior_fn = _prior_cdf_factory(prior_model)
     prior_samples = _prior_samples(prior_model)
+    event_ts = pd.Timestamp(configuration.event.resolution_date)
+    lag_candidates = (7, 8, 9, 10)
 
     ensemble_weights = configuration.model.ensemble_weights
     prior_weight = configuration.model.prior_weight
@@ -185,6 +189,22 @@ def run_freeze_backtest(
             return
         row = row.iloc[-1]
 
+        latest_ts = pd.to_datetime(row.get("date"))
+        if pd.isna(latest_ts):
+            days_to_event = None
+        else:
+            latest_ts = pd.Timestamp(latest_ts).normalize()
+            days_to_event = max(0, int((event_ts - latest_ts).days))
+        lag_min = min(lag_candidates)
+        if days_to_event is None:
+            beta_horizon_scale = 1.0
+        elif days_to_event <= 0:
+            beta_horizon_scale = 0.0
+        elif days_to_event < lag_min:
+            beta_horizon_scale = float(days_to_event) / float(lag_min)
+        else:
+            beta_horizon_scale = 1.0
+
         try:
             ensemble = EnsembleModel(weights=ensemble_weights)
             ensemble.fit(subset)
@@ -209,7 +229,7 @@ def run_freeze_backtest(
         def posterior_factory(
             rbob_delta: float, alpha_delta: float
         ) -> PosteriorDistribution:
-            beta_effect = _select_beta(rbob_delta, structural)
+            beta_effect = _select_beta(rbob_delta, structural) * beta_horizon_scale
             adjusted_samples = base_samples + alpha_delta + beta_effect * rbob_delta
             # Clip to a plausible retail range to reduce CRPS blowups
             adjusted_samples = np.clip(adjusted_samples, 2.60, 4.40)
@@ -230,7 +250,7 @@ def run_freeze_backtest(
         else:
             rbob_delta = 0.0
 
-        beta_effect = _select_beta(rbob_delta, structural)
+        beta_effect = _select_beta(rbob_delta, structural) * beta_horizon_scale
         rbob_prediction = carry_price + beta_effect * rbob_delta
 
         kalshi_probs = [
@@ -242,7 +262,7 @@ def run_freeze_backtest(
         prior_crps = sample_crps(prior_samples, actual)
 
         for threshold, kalshi_prob in zip(thresholds, kalshi_probs):
-            prob_posterior = posterior.prob_gt(float(threshold))
+            prob_posterior = posterior.prob_above(float(threshold))
             prob_carry = _deterministic_prob(carry_price, float(threshold))
             prob_rbob = _deterministic_prob(rbob_prediction, float(threshold))
             prob_prior = float(kalshi_prob)
@@ -354,32 +374,29 @@ def run_freeze_backtest(
             candidate = numerator / denom
             best_weight = float(np.clip(candidate, 0.0, 1.0))
 
-        carry_weight: float | None = None
-        blended_probs: List[float] | None = None
+        min_weight = 0.2
+        best_weight = max(float(best_weight or 0.0), min_weight)
 
-        if best_weight is not None:
+        def _apply_weight(weight: float) -> list[float]:
             new_probs: List[float] = []
             carry_vals: List[float] = []
-            for idx, comp in enumerate(calibration_components):
+            for comp in calibration_components:
                 prob_new = float(
                     np.clip(
                         1.0
-                        - (
-                            (1 - best_weight) * comp["emp_cdf"]
-                            + best_weight * comp["prior_cdf"]
-                        ),
+                        - ((1 - weight) * comp["emp_cdf"] + weight * comp["prior_cdf"]),
                         0.0,
                         1.0,
                     )
                 )
                 new_probs.append(prob_new)
                 carry_vals.append(float(comp.get("carry_prob", prob_new)))
+
             like_vals = np.asarray(new_probs, dtype=float)
             carry_arr = np.asarray(carry_vals, dtype=float)
             diffs_carry = carry_arr - like_vals
             denom_carry = float(np.mean(diffs_carry**2))
             if denom_carry <= 1e-12:
-                carry_weight = 0.0
                 blended_arr = like_vals
             else:
                 like_offsets = like_vals - outcome_vals
@@ -389,17 +406,42 @@ def run_freeze_backtest(
                     )
                 )
                 blended_arr = (1 - carry_weight) * like_vals + carry_weight * carry_arr
-            blended_probs = blended_arr.tolist()
+
+            calibration_probs_local = [
+                float(np.clip(val, 0.0, 1.0)) for val in blended_arr
+            ]
             for idx, record_idx in enumerate(posterior_indices):
-                if idx >= len(blended_probs):
+                if idx >= len(blended_arr):
                     break
-                prob_final = float(np.clip(blended_probs[idx], 0.0, 1.0))
+                prob_final = float(np.clip(blended_arr[idx], 0.0, 1.0))
                 outcome_val = float(calibration_components[idx]["outcome"])
                 records_df.at[record_idx, "probability"] = prob_final
                 records_df.at[record_idx, "brier"] = float(
                     (prob_final - outcome_val) ** 2
                 )
-            calibration_probs = [float(np.clip(val, 0.0, 1.0)) for val in blended_arr]
+            return calibration_probs_local
+
+        calibration_probs = _apply_weight(best_weight)
+        prior_payload_note: str | None = None
+        central_mask = np.isclose(records_df["threshold"], calibration_threshold)
+        central_df = records_df[central_mask]
+        if not central_df.empty:
+            post_brier = float(
+                central_df[central_df["model"] == "posterior"]["brier"].mean()
+            )
+            carry_brier = float(
+                central_df[central_df["model"] == "carry"]["brier"].mean()
+            )
+            if (
+                np.isfinite(post_brier)
+                and np.isfinite(carry_brier)
+                and post_brier > carry_brier
+            ):
+                bumped_weight = min(1.0, best_weight + 0.05)
+                if bumped_weight > best_weight + 1e-6:
+                    best_weight = bumped_weight
+                    calibration_probs = _apply_weight(best_weight)
+                    prior_payload_note = "posterior_brier_above_carry"
 
         prior_meta_path = data_proc_dir / "prior_weight.json"
         payload = {
@@ -407,8 +449,8 @@ def run_freeze_backtest(
             "dataset_digest": dataset_digest or "unknown",
             "dataset_as_of": dataset_as_of,
         }
-        if carry_weight is not None:
-            payload["carry_blend_weight"] = carry_weight
+        if prior_payload_note is not None:
+            payload["note"] = prior_payload_note
         with prior_meta_path.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
 

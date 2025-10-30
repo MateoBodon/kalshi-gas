@@ -1,8 +1,11 @@
 {
-  "as_of": "2025-10-18",
+  "as_of": "2025-10-30",
   "threshold": 3.1,
-  "prob_yes": 0.532,
-  "prior_weight": 0.0,
+  "prob_yes": 0.0796,
+  "prior_weight": 0.2,
   "prior_weight_source": "file",
-  "dataset_digest": "90f05a1137f58536020c00b946d397699662f1b39a3f4b0d32c2ea3de71a1645"
+  "dataset_digest": "dda40006e07ef3dbd3b2dafbeb9e51ef127e00dd806a95889faaa315ee9eab86",
+  "days_to_event": 1,
+  "beta_eff": 0.00036865612398272185,
+  "alpha_lift_applied": 0.004285714285714285
 }
