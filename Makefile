@@ -33,11 +33,9 @@ clean:
 
 calibrate: .mplcache
 	$(PYTHON) -m kalshi_gas.cli report --force
-	$(PYTHON) scripts/calibrate_prior_weight.py
 	$(PYTHON) scripts/estimate_residual_sigma.py
+	$(PYTHON) scripts/calibrate_prior_weight.py
 	$(PYTHON) -m kalshi_gas.cli report
-	$(PYTHON) scripts/calibrate_prior_weight.py
-	$(PYTHON) scripts/estimate_residual_sigma.py
 
 freeze-backtest:
 	$(PYTHON) -m kalshi_gas.cli freeze-backtest --config config/freeze.yaml

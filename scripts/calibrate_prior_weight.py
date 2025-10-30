@@ -17,9 +17,9 @@ from kalshi_gas.backtest.metrics import brier_score
 from kalshi_gas.config import load_config
 from kalshi_gas.data.assemble import assemble_dataset
 from kalshi_gas.etl.pipeline import run_all_etl
-from kalshi_gas.models.ensemble import EnsembleModel
 from kalshi_gas.utils.dataset import frame_digest
 from kalshi_gas.utils.thresholds import load_kalshi_thresholds
+from kalshi_gas.utils.sigma import load_residual_sigma
 
 WEIGHT_GRID: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20)
 TARGET_HORIZONS: tuple[int, ...] = (1, 2)
@@ -75,16 +75,12 @@ def calibrate_prior_weight(config_path: str | None = None) -> CalibrationResult:
     if subset.empty:
         raise RuntimeError("No observations within target horizons (1-2 days)")
 
-    ensemble = EnsembleModel(weights=cfg.model.ensemble_weights)
-    ensemble.fit(dataset)
-    predictions = ensemble.predict(dataset)
-    sigma = getattr(
-        ensemble, "residual_std", float(subset["regular_gas_price"].diff().std(ddof=1))
-    )
-    if not np.isfinite(sigma) or sigma <= 0:
-        sigma = 0.01
+    fallback_sigma = float(subset["regular_gas_price"].diff().std(ddof=1))
+    if not np.isfinite(fallback_sigma) or fallback_sigma <= 0:
+        fallback_sigma = 0.01
+    sigma, _meta = load_residual_sigma(fallback=fallback_sigma)
 
-    subset_preds = predictions.loc[subset.index, "ensemble"].astype(float)
+    subset_preds = subset["regular_gas_price"].astype(float)
     likelihood = compute_event_probabilities(
         subset_preds,
         sigma=sigma,
@@ -92,7 +88,9 @@ def calibrate_prior_weight(config_path: str | None = None) -> CalibrationResult:
     )
     likelihood = np.asarray(likelihood, dtype=float)
 
-    prior_probs = subset["kalshi_prob"].to_numpy(dtype=float)
+    prior_probs = (
+        subset["kalshi_prob"].astype(float).ffill().bfill().to_numpy(dtype=float)
+    )
     outcomes = (
         (subset["target_future_price"] >= event_threshold).astype(float).to_numpy()
     )

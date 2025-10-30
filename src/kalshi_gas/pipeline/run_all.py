@@ -36,6 +36,7 @@ from kalshi_gas.reporting.visuals import (
 )
 from kalshi_gas.risk.gates import evaluate_risk
 from kalshi_gas.utils.dataset import frame_digest
+from kalshi_gas.utils.sigma import load_residual_sigma
 from kalshi_gas.utils.thresholds import load_kalshi_thresholds
 from kalshi_gas.viz.plots import plot_fundamentals_dashboard
 
@@ -680,92 +681,23 @@ def run_pipeline(
         central_probability = prior_model.survival(event_threshold)
     prior_fn = _prior_cdf_factory(prior_model)
 
-    residual_meta = _load_json(Path("data_proc") / "residual_sigma.json") or {}
-    residual_sigma = float(residual_meta.get("sigma", 0.0) or 0.0)
-    if not np.isfinite(residual_sigma) or residual_sigma <= 0:
-        residual_sigma = float(np.std(nowcast_sim.samples, ddof=0))
-        if not np.isfinite(residual_sigma) or residual_sigma <= 0:
-            residual_sigma = 0.01
-    sample_size = int(len(nowcast_sim.samples))
-    if sample_size <= 0:
-        sample_size = 2048
+    fallback_sigma = float(np.std(nowcast_sim.samples, ddof=0))
+    if not np.isfinite(fallback_sigma) or fallback_sigma <= 0:
+        fallback_sigma = 0.01
+    residual_sigma, _residual_meta = load_residual_sigma(fallback=fallback_sigma)
+    nowcast_mean = None
+    if "live_price" in locals() and isinstance(live_price, (int, float)):
+        nowcast_mean = float(live_price)
+    if nowcast_mean is None and not dataset_for_model.empty:
+        nowcast_mean = float(dataset_for_model.iloc[-1]["regular_gas_price"])
+    if nowcast_mean is None:
+        nowcast_mean = float(nowcast_sim.mean)
+    sample_size = max(int(len(nowcast_sim.samples)), 4096)
     base_samples = np.random.normal(
-        loc=nowcast_sim.mean,
+        loc=nowcast_mean,
         scale=residual_sigma,
         size=sample_size,
     )
-
-    price_history: pd.DataFrame | None = None
-    aaa_delta_recent = pd.Series(dtype=float)
-    try:
-        price_history = dataset[["date", "regular_gas_price"]].dropna().copy()
-        price_history["date"] = pd.to_datetime(price_history["date"])
-        price_history = (
-            price_history.sort_values("date")
-            .drop_duplicates(subset=["date"], keep="last")
-            .reset_index(drop=True)
-        )
-        if price_history.empty:
-            raise ValueError("no price history")
-        cutoff_ts = None
-        if dataset_as_of is not None:
-            cutoff_ts = pd.Timestamp(dataset_as_of) - pd.DateOffset(months=24)
-        else:
-            cutoff_ts = price_history["date"].max() - pd.DateOffset(months=24)
-        if cutoff_ts is not None:
-            price_history = price_history[price_history["date"] >= cutoff_ts]
-        price_history["delta"] = price_history["regular_gas_price"].diff()
-        aaa_delta_recent = price_history["delta"].dropna()
-    except Exception:
-        price_history = None
-        aaa_delta_recent = pd.Series(dtype=float)
-
-    freeze_metrics: dict[str, object] = {}
-    if price_history is not None and not price_history.empty:
-        latest_row = price_history.iloc[-1]
-        latest_price = float(latest_row["regular_gas_price"])
-        latest_date_iso = pd.Timestamp(latest_row["date"]).date().isoformat()
-
-        def _lookup_offset(days: int) -> dict[str, object] | None:
-            target_ts = pd.Timestamp(latest_row["date"]) - pd.Timedelta(days=days)
-            eligible = price_history[price_history["date"] <= target_ts]
-            if eligible.empty:
-                return None
-            row = eligible.iloc[-1]
-            return {
-                "date": pd.Timestamp(row["date"]).date().isoformat(),
-                "value": float(row["regular_gas_price"]),
-            }
-
-        week_ago = _lookup_offset(7)
-        month_ago = _lookup_offset(30)
-        rbob_latest = None
-        if "rbob_settle" in dataset.columns and not dataset.empty:
-            try:
-                rbob_latest_val = float(dataset.iloc[-1]["rbob_settle"])
-                rbob_latest = {
-                    "date": pd.Timestamp(dataset.iloc[-1]["date"]).date().isoformat()
-                    if not pd.isna(dataset.iloc[-1]["date"])
-                    else dataset_as_of,
-                    "value": rbob_latest_val,
-                }
-            except Exception:
-                rbob_latest = None
-
-        freeze_metrics = {
-            "aaa_today": {"date": latest_date_iso, "value": latest_price},
-            "aaa_week_ago": week_ago,
-            "aaa_month_ago": month_ago,
-            "event_threshold": float(event_threshold),
-            "price_gap": float(event_threshold - latest_price),
-            "rbob_settle": rbob_latest,
-            "wti_proxy": None,
-            "alpha_lift": float(alpha_lift_applied),
-            "beta_eff": float(beta_eff),
-            "prior_weight": float(prior_weight),
-            "residual_sigma": float(residual_sigma),
-        }
-    risk_context["freeze_metrics"] = freeze_metrics
 
     def posterior_factory(
         rbob_delta: float, alpha_delta: float
@@ -857,6 +789,98 @@ def run_pipeline(
                 "prob_delta_pp": (scenario_prob - base_prob_event) * 100,
             }
         )
+
+    price_history: pd.DataFrame | None = None
+    aaa_delta_recent = pd.Series(dtype=float)
+    price_gap: float | None = None
+    latest_price: float | None = None
+    try:
+        price_history = dataset[["date", "regular_gas_price"]].dropna().copy()
+        price_history["date"] = pd.to_datetime(price_history["date"])
+        price_history = (
+            price_history.sort_values("date")
+            .drop_duplicates(subset=["date"], keep="last")
+            .reset_index(drop=True)
+        )
+        if price_history.empty:
+            raise ValueError("no price history")
+        cutoff_ts = (
+            pd.Timestamp(dataset_as_of) - pd.DateOffset(months=24)
+            if dataset_as_of is not None
+            else price_history["date"].max() - pd.DateOffset(months=24)
+        )
+        if cutoff_ts is not None:
+            price_history = price_history[price_history["date"] >= cutoff_ts]
+        price_history["delta"] = price_history["regular_gas_price"].diff()
+        aaa_delta_recent = price_history["delta"].dropna()
+    except Exception:
+        price_history = None
+        aaa_delta_recent = pd.Series(dtype=float)
+
+    freeze_metrics: dict[str, object]
+    if price_history is not None and not price_history.empty:
+        latest_row = price_history.iloc[-1]
+        latest_price = float(latest_row["regular_gas_price"])
+        latest_date_iso = pd.Timestamp(latest_row["date"]).date().isoformat()
+
+        def _lookup_offset(days: int) -> dict[str, object] | None:
+            target_ts = pd.Timestamp(latest_row["date"]) - pd.Timedelta(days=days)
+            eligible = price_history[price_history["date"] <= target_ts]
+            if eligible.empty:
+                return None
+            row = eligible.iloc[-1]
+            return {
+                "date": pd.Timestamp(row["date"]).date().isoformat(),
+                "value": float(row["regular_gas_price"]),
+            }
+
+        week_ago = _lookup_offset(7)
+        month_ago = _lookup_offset(30)
+        rbob_latest = None
+        if "rbob_settle" in dataset.columns and not dataset.empty:
+            try:
+                rbob_latest_val = float(dataset.iloc[-1]["rbob_settle"])
+                rbob_latest = {
+                    "date": pd.Timestamp(dataset.iloc[-1]["date"]).date().isoformat()
+                    if not pd.isna(dataset.iloc[-1]["date"])
+                    else dataset_as_of,
+                    "value": rbob_latest_val,
+                }
+            except Exception:
+                rbob_latest = None
+
+        price_gap = float(event_threshold - latest_price)
+        freeze_metrics = {
+            "aaa_today": {"date": latest_date_iso, "value": latest_price},
+            "aaa_week_ago": week_ago,
+            "aaa_month_ago": month_ago,
+            "event_threshold": float(event_threshold),
+            "price_gap": price_gap,
+            "rbob_settle": rbob_latest,
+            "wti_proxy": None,
+        }
+    else:
+        freeze_metrics = {
+            "aaa_today": None,
+            "aaa_week_ago": None,
+            "aaa_month_ago": None,
+            "event_threshold": float(event_threshold),
+            "price_gap": None,
+            "rbob_settle": None,
+            "wti_proxy": None,
+        }
+
+    freeze_metrics.update(
+        {
+            "alpha_lift": float(alpha_lift_applied),
+            "beta_eff": float(beta_eff),
+            "prior_weight": float(prior_weight),
+            "residual_sigma": float(residual_sigma),
+            "point_forecast": float(posterior_summary.get("mean", nowcast_mean)),
+            "tail_probability": float(base_prob_event),
+        }
+    )
+    risk_context["freeze_metrics"] = freeze_metrics
 
     event_key = f"prob_gt_{float(event_threshold):.2f}"
     summary_payload = {
@@ -1030,7 +1054,7 @@ def run_pipeline(
             delta_hist_fig,
             as_of=dataset_as_of,
             sigma=residual_sigma,
-            reference_delta=0.062,
+            reference_delta=price_gap,
             source="AAA daily",
         )
     except Exception:  # noqa: BLE001

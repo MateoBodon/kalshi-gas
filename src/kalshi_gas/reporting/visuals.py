@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -253,6 +254,8 @@ def plot_aaa_delta_histogram(
     ax.set_ylabel("Frequency")
     ax.set_title("AAA Daily Change Distribution (24m tail)")
 
+    ax.axvline(0.0, color="#222222", linestyle="-", linewidth=1.2, alpha=0.8)
+
     if sigma is not None and sigma > 0:
         sigma_cents = sigma * 100
         ax.axvline(
@@ -268,7 +271,11 @@ def plot_aaa_delta_histogram(
             linestyle="--",
             linewidth=1.5,
         )
-    if reference_delta is not None:
+    if (
+        reference_delta is not None
+        and isinstance(reference_delta, (int, float))
+        and not math.isnan(reference_delta)
+    ):
         ref_cents = reference_delta * 100
         ax.axvline(
             ref_cents,
