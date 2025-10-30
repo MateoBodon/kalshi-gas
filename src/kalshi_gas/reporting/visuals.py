@@ -233,6 +233,61 @@ def plot_sensitivity_bars(
     return output_path
 
 
+def plot_aaa_delta_histogram(
+    deltas: pd.Series | np.ndarray,
+    output_path: Path,
+    *,
+    as_of: str | None = None,
+    sigma: float | None = None,
+    reference_delta: float | None = None,
+    source: str | None = None,
+) -> Path:
+    series = pd.Series(deltas, dtype=float).dropna()
+    if series.empty:
+        series = pd.Series([0.0], dtype=float)
+    values_cents = series.to_numpy(dtype=float) * 100
+
+    fig, ax = plt.subplots(figsize=(6.5, 4))
+    ax.hist(values_cents, bins=30, color="#4c72b0", alpha=0.75, edgecolor="white")
+    ax.set_xlabel("Δ AAA (¢/gal)")
+    ax.set_ylabel("Frequency")
+    ax.set_title("AAA Daily Change Distribution (24m tail)")
+
+    if sigma is not None and sigma > 0:
+        sigma_cents = sigma * 100
+        ax.axvline(
+            sigma_cents,
+            color="#d62728",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"+1σ ({sigma_cents:.2f}¢)",
+        )
+        ax.axvline(
+            -sigma_cents,
+            color="#d62728",
+            linestyle="--",
+            linewidth=1.5,
+        )
+    if reference_delta is not None:
+        ref_cents = reference_delta * 100
+        ax.axvline(
+            ref_cents,
+            color="#2ca02c",
+            linestyle=":",
+            linewidth=1.5,
+            label=f"+{ref_cents:.1f}¢ reference",
+        )
+    if sigma is not None or reference_delta is not None:
+        ax.legend(loc="upper right")
+
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    _draw_footer(fig, as_of, source)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
 def plot_pass_through_fit(
     data: pd.DataFrame,
     structural: dict,

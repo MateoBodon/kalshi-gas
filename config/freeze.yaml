@@ -1,0 +1,25 @@
+# T+1 freeze configuration (loads via --config)
+data:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  external_dir: data/external
+  build_dir: build
+model:
+  ensemble_weights:
+    nowcast: 0.0
+    pass_through: 0.0
+    market_prior: 1.0
+  calibration_bins: 10
+  horizon_days: 7
+  prior_weight: 0.10
+  nowcast_drift_bounds:
+    - -0.004
+    - 0.000
+risk_gates:
+  nhc_active_threshold: 1
+  wpsr_inventory_cutoff: -3.0
+event:
+  name: AAA National Average Regular > $3.10 on Oct 31, 2025
+  resolution_date: 2025-10-31
+  threshold: 3.10

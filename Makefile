@@ -14,7 +14,7 @@ test:
 	$(PYTHON) -m pytest
 
 report: .mplcache
-	MPLBACKEND=Agg MPLCONFIGDIR=$(CURDIR)/.mplcache XDG_CACHE_HOME=$(CURDIR)/.mplcache $(PYTHON) -m kalshi_gas.cli report
+	MPLBACKEND=Agg MPLCONFIGDIR=$(CURDIR)/.mplcache XDG_CACHE_HOME=$(CURDIR)/.mplcache $(PYTHON) -m kalshi_gas.cli report --force
 
 deck:
 	$(PYTHON) -m kalshi_gas.reporting.deck
@@ -32,10 +32,15 @@ clean:
 	rm -rf build data/raw/* data/interim/* data/processed/*
 
 calibrate: .mplcache
-	MPLBACKEND=Agg MPLCONFIGDIR=$(CURDIR)/.mplcache XDG_CACHE_HOME=$(CURDIR)/.mplcache $(PYTHON) -m kalshi_gas.backtest.calibrate_prior
+	$(PYTHON) -m kalshi_gas.cli report --force
+	$(PYTHON) scripts/calibrate_prior_weight.py
+	$(PYTHON) scripts/estimate_residual_sigma.py
+	$(PYTHON) -m kalshi_gas.cli report
+	$(PYTHON) scripts/calibrate_prior_weight.py
+	$(PYTHON) scripts/estimate_residual_sigma.py
 
 freeze-backtest:
-	$(PYTHON) -m kalshi_gas.pipeline.backtest
+	$(PYTHON) -m kalshi_gas.cli freeze-backtest --config config/freeze.yaml
 
 sweep-ensemble:
 	$(PYTHON) -m kalshi_gas.backtest.sweep_ensemble

@@ -473,6 +473,48 @@ class AAATransformer:
         combined = combined.sort_values("date")
         combined["regular_gas_price"] = combined["regular_gas_price"].round(3)
         combined["date"] = combined["date"].dt.date
+
+        override_path = Path("data_raw/aaa_override.csv")
+        if override_path.exists():
+            override = pd.read_csv(override_path, parse_dates=["date"])
+            if (
+                "regular_gas_price" not in override.columns
+                and "price" in override.columns
+            ):
+                override = override.rename(columns={"price": "regular_gas_price"})
+            override["regular_gas_price"] = pd.to_numeric(
+                override["regular_gas_price"], errors="coerce"
+            )
+            override = override.dropna(subset=["date", "regular_gas_price"])
+            override.sort_values("date", inplace=True)
+            if not override.empty:
+                latest_override = override.iloc[-1]
+                override_date = latest_override["date"]
+                if pd.notna(override_date):
+                    override_date = pd.Timestamp(override_date).date()
+                    if override_date == datetime.now(timezone.utc).date():
+                        combined = combined[combined["date"] != override_date]
+                        combined = pd.concat(
+                            [
+                                combined,
+                                pd.DataFrame(
+                                    {
+                                        "date": [override_date],
+                                        "regular_gas_price": [
+                                            round(
+                                                float(
+                                                    latest_override["regular_gas_price"]
+                                                ),
+                                                3,
+                                            )
+                                        ],
+                                    }
+                                ),
+                            ],
+                            ignore_index=True,
+                        )
+                        combined.sort_values("date", inplace=True)
+
         return combined.reset_index(drop=True)
 
 

@@ -101,6 +101,32 @@ _{{ figure_footer }}_
 | {{ row.get('model') }} | {{ "%.4f"|format(row.get('brier')) if row.get('brier') is not none else "" }} | {{ "%.4f"|format(row.get('crps')) if row.get('crps') is not none else "" }} |
 {% endfor %}
 {% endif %}
+{% set freeze_metrics = risk_context.get('freeze_metrics') if risk_context else None %}
+{% if freeze_metrics %}
+
+#### Freeze Snapshot
+| Series | Date | Value (USD/gal) |
+| --- | --- | --- |
+{% set today = freeze_metrics.get('aaa_today') %}
+| AAA today | {{ today.date if today else 'n/a' }} | {{ "%.4f"|format(today.value) if today and today.value is not none else 'n/a' }} |
+{% set week = freeze_metrics.get('aaa_week_ago') %}
+| AAA week-ago | {{ week.date if week else 'n/a' }} | {{ "%.4f"|format(week.value) if week and week.value is not none else 'n/a' }} |
+{% set month = freeze_metrics.get('aaa_month_ago') %}
+| AAA month-ago | {{ month.date if month else 'n/a' }} | {{ "%.4f"|format(month.value) if month and month.value is not none else 'n/a' }} |
+{% set rbob = freeze_metrics.get('rbob_settle') %}
+| RBOB settle | {{ rbob.date if rbob else 'n/a' }} | {{ "%.4f"|format(rbob.value) if rbob and rbob.value is not none else 'n/a' }} |
+
+#### Freeze-date Parameters
+| Parameter | Value |
+| --- | --- |
+| Event threshold | {{ "%.2f"|format(freeze_metrics.get('event_threshold')|default(0.0, true)) }} |
+| Threshold gap | {{ "%.4f"|format(freeze_metrics.get('price_gap')|default(0.0, true)) }} |
+| α lift | {{ "%.4f"|format(freeze_metrics.get('alpha_lift')|default(0.0, true)) }} |
+| β_eff | {{ "%.4f"|format(freeze_metrics.get('beta_eff')|default(0.0, true)) }} |
+| Prior weight | {{ "%.2f"|format(freeze_metrics.get('prior_weight')|default(0.0, true)) }} |
+| Residual σ | {{ "%.4f"|format(freeze_metrics.get('residual_sigma')|default(0.0, true)) }} |
+| WTI proxy | {{ freeze_metrics.get('wti_proxy') if freeze_metrics.get('wti_proxy') is not none else 'n/a' }} |
+{% endif %}
 {% if jackknife %}
 
 **Jackknife Stability:** {{ jackknife }}
@@ -121,6 +147,9 @@ _{{ figure_footer }}_
 
 ## Model Outputs
 ![Sensitivity Bars]({{ figures.sensitivity }})
+_{{ figure_footer }}_
+
+![AAA Daily Δ Histogram]({{ figures.delta_hist }})
 _{{ figure_footer }}_
 
 {% set horizon_threshold = posterior.final_threshold or posterior.event_threshold %}

@@ -425,7 +425,7 @@ def run_freeze_backtest(
         prior_payload_note: str | None = None
         central_mask = np.isclose(records_df["threshold"], calibration_threshold)
         central_df = records_df[central_mask]
-        if not central_df.empty:
+        if best_weight is not None and not central_df.empty:
             post_brier = float(
                 central_df[central_df["model"] == "posterior"]["brier"].mean()
             )
@@ -442,6 +442,9 @@ def run_freeze_backtest(
                     best_weight = bumped_weight
                     calibration_probs = _apply_weight(best_weight)
                     prior_payload_note = "posterior_brier_above_carry"
+
+        if best_weight is not None:
+            best_weight = min(float(best_weight), 0.10)
 
         prior_meta_path = data_proc_dir / "prior_weight.json"
         payload = {

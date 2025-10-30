@@ -1,44 +1,45 @@
 {
   "as_of": "2025-10-30",
   "threshold": 3.1,
-  "prob_yes": 0.0796,
-  "prior_weight": 0.2,
+  "prob_yes": 0.0,
+  "prior_weight": 0.0,
   "prior_weight_source": "file",
   "dataset_digest": "dda40006e07ef3dbd3b2dafbeb9e51ef127e00dd806a95889faaa315ee9eab86",
   "days_to_event": 1,
-  "beta_eff": 0.00036865612398272185,
-  "alpha_lift_applied": 0.004285714285714285,
+  "beta_eff": 0.0,
+  "alpha_lift_applied": 0.0,
+  "residual_sigma": 0.008439527060241198,
   "tplus1_sensitivity": [
     {
       "scenario": "RBOB +$0.05",
-      "beta_eff": 0.00036865612398272185,
+      "beta_eff": 0.0,
       "rbob_delta": 0.05,
       "alpha_delta": 0.0,
-      "probability": 0.0796,
+      "probability": 0.0,
       "prob_delta_pp": 0.0
     },
     {
       "scenario": "RBOB -$0.05",
-      "beta_eff": 0.00036865612398272185,
+      "beta_eff": 0.0,
       "rbob_delta": -0.05,
       "alpha_delta": 0.0,
-      "probability": 0.0796,
+      "probability": 0.0,
       "prob_delta_pp": 0.0
     },
     {
       "scenario": "\u03b1 +$0.02",
-      "beta_eff": 0.00036865612398272185,
+      "beta_eff": 0.0,
       "rbob_delta": 0.0,
       "alpha_delta": 0.02,
-      "probability": 0.2087898639396496,
-      "prob_delta_pp": 12.91898639396496
+      "probability": 0.0,
+      "prob_delta_pp": 0.0
     },
     {
       "scenario": "\u03b1 -$0.02",
-      "beta_eff": 0.00036865612398272185,
+      "beta_eff": 0.0,
       "rbob_delta": 0.0,
       "alpha_delta": -0.02,
-      "probability": 0.0796,
+      "probability": 0.0,
       "prob_delta_pp": 0.0
     }
   ]
