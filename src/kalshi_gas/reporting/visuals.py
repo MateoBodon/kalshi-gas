@@ -160,7 +160,7 @@ def plot_threshold_scurve(
         ]
 
     ax.plot(x, tail_curve, color="#1f77b4")
-    ax.set_ylim(0, 1)
+    ax.set_ylim(-0.05, 1.05)
     ax.set_xlim(min(x), max(x))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v * 100:.0f}%"))
 
@@ -170,8 +170,9 @@ def plot_threshold_scurve(
             f"{prob * 100:.2f}%",
             (thresh, prob),
             textcoords="offset points",
-            xytext=(0, -12),
+            xytext=(0, 6),
             ha="center",
+            va="bottom",
             fontsize=8,
             color="#d62728",
         )
