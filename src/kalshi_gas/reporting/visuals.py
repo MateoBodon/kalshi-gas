@@ -160,19 +160,28 @@ def plot_threshold_scurve(
         ]
 
     ax.plot(x, tail_curve, color="#1f77b4")
-    ax.set_ylim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.08)
     ax.set_xlim(min(x), max(x))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v * 100:.0f}%"))
 
     ax.scatter(thresholds, marker_probs, color="#d62728", zorder=3)
     for thresh, prob in zip(thresholds, marker_probs, strict=True):
+        if prob >= 0.85:
+            offset_y = -12
+            valign = "top"
+        elif prob <= 0.15:
+            offset_y = 6
+            valign = "bottom"
+        else:
+            offset_y = 6
+            valign = "bottom"
         ax.annotate(
             f"{prob * 100:.2f}%",
             (thresh, prob),
             textcoords="offset points",
-            xytext=(0, 6),
+            xytext=(0, offset_y),
             ha="center",
-            va="bottom",
+            va=valign,
             fontsize=8,
             color="#d62728",
         )

@@ -1,6 +1,6 @@
 # Gas Market Forecast Report
 
-Generated on 2025-10-31T02:07:11+00:00
+Generated on 2025-10-31T02:10:34+00:00
 Provenance sidecars: [data_proc/meta/aaa.json](data_proc/meta/aaa.json), [data_proc/meta/eia.json](data_proc/meta/eia.json), [data_proc/meta/kalshi.json](data_proc/meta/kalshi.json), [data_proc/meta/rbob.json](data_proc/meta/rbob.json), [data_proc/meta/dataset.json](data_proc/meta/dataset.json)
 ## Headline Call
 **Final Probability:** 0.0% that AAA national regular > $3.10 on 2025-10-31
@@ -77,7 +77,7 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 ### Freeze-date Metrics (central threshold)
 | Model | Brier | CRPS |
 | --- | --- | --- |
-| Posterior | 0.0000 | 0.0555 |
+| Posterior | 0.0000 | 0.0581 |
 | Carry Forward | 0.0000 | 0.0050 |
 | RBOB Only | 0.0000 | 0.0071 |
 | Kalshi Prior | 0.7468 | 0.2112 |
@@ -99,9 +99,9 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 | β_eff | 0.0000 |
 | Prior weight | 0.10 |
 | Effective prior weight | 0.00 |
-| Gap z-score | 6.5σ |
-| Residual σ | 0.0096 |
-| Point forecast | 3.0301 |
+| Gap z-score | 6.8σ |
+| Residual σ | 0.0091 |
+| Point forecast | 3.0299 |
 | Tail probability | <0.10% |
 | WTI proxy | n/a |
 
@@ -140,8 +140,8 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 #### Adjacent thresholds (same freeze)
 | Threshold | Probability |
 | --- | --- |
-| P(>3.00) | 99.91% |
-| P(>3.05) | 1.83% |
+| P(>3.00) | 99.95% |
+| P(>3.05) | 1.39% |
 | P(>3.10) | <0.10% |
 
 _Horizon-aware T+1 adjustments:_
@@ -154,16 +154,16 @@ _Horizon-aware T+1 adjustments:_
 | α -$0.02 | 0.0000 | -2.0¢ | +0.00pp |
 
 ### Posterior Snapshot
-- Mean: 3.0301
+- Mean: 3.0299
 - Variance: 0.0001
-- 90% CI: [3.0143, 3.0463] (0.0158 down / 0.0162 up)
-- 80% CI: [3.0177, 3.0427]
+- 90% CI: [3.0147, 3.0446] (0.0151 down / 0.0147 up)
+- 80% CI: [3.0183, 3.0412]
 - Prior weight: 0.10 (calibrated)
-- Asymmetry: Δβ = -0.1237 (95% CI [-0.0604, 0.0316])
-- P(X > 2.90) = 0.9998
+- Asymmetry: Δβ = -0.1237 (95% CI [-0.0599, 0.0303])
+- P(X > 2.90) = 0.9999
 - P(X > 2.95) = 0.9998
 - P(X > 3.00) = 0.9995
-- P(X > 3.05) = 0.0196
+- P(X > 3.05) = 0.0139
 - P(X > 3.10) = 0.0000
 - Dataset digest: dda40006e07ef3dbd3b2dafbeb9e51ef127e00dd806a95889faaa315ee9eab86
 
@@ -183,50 +183,50 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 | Threshold | ΔRBOB | ΔAlpha | Prob > Threshold |
 | --- | --- | --- | --- |
 | 2.90 | -0.050 | -0.050 | 0.9998 |
-| 2.90 | -0.050 | 0.000 | 0.9998 |
+| 2.90 | -0.050 | 0.000 | 0.9999 |
 | 2.90 | -0.050 | 0.050 | 0.9999 |
 | 2.90 | 0.000 | -0.050 | 0.9998 |
-| 2.90 | 0.000 | 0.000 | 0.9998 |
+| 2.90 | 0.000 | 0.000 | 0.9999 |
 | 2.90 | 0.000 | 0.050 | 0.9999 |
 | 2.90 | 0.050 | -0.050 | 0.9998 |
-| 2.90 | 0.050 | 0.000 | 0.9998 |
+| 2.90 | 0.050 | 0.000 | 0.9999 |
 | 2.90 | 0.050 | 0.050 | 0.9999 |
 | 2.95 | -0.050 | -0.050 | 0.9995 |
 | 2.95 | -0.050 | 0.000 | 0.9998 |
-| 2.95 | -0.050 | 0.050 | 0.9998 |
+| 2.95 | -0.050 | 0.050 | 0.9999 |
 | 2.95 | 0.000 | -0.050 | 0.9995 |
 | 2.95 | 0.000 | 0.000 | 0.9998 |
-| 2.95 | 0.000 | 0.050 | 0.9998 |
+| 2.95 | 0.000 | 0.050 | 0.9999 |
 | 2.95 | 0.050 | -0.050 | 0.9995 |
 | 2.95 | 0.050 | 0.000 | 0.9998 |
-| 2.95 | 0.050 | 0.050 | 0.9998 |
-| 3.00 | -0.050 | -0.050 | 0.0196 |
+| 2.95 | 0.050 | 0.050 | 0.9999 |
+| 3.00 | -0.050 | -0.050 | 0.0139 |
 | 3.00 | -0.050 | 0.000 | 0.9995 |
 | 3.00 | -0.050 | 0.050 | 0.9998 |
-| 3.00 | 0.000 | -0.050 | 0.0196 |
+| 3.00 | 0.000 | -0.050 | 0.0139 |
 | 3.00 | 0.000 | 0.000 | 0.9995 |
 | 3.00 | 0.000 | 0.050 | 0.9998 |
-| 3.00 | 0.050 | -0.050 | 0.0196 |
+| 3.00 | 0.050 | -0.050 | 0.0139 |
 | 3.00 | 0.050 | 0.000 | 0.9995 |
 | 3.00 | 0.050 | 0.050 | 0.9998 |
 | 3.05 | -0.050 | -0.050 | 0.0000 |
-| 3.05 | -0.050 | 0.000 | 0.0196 |
+| 3.05 | -0.050 | 0.000 | 0.0139 |
 | 3.05 | -0.050 | 0.050 | 0.9995 |
 | 3.05 | 0.000 | -0.050 | 0.0000 |
-| 3.05 | 0.000 | 0.000 | 0.0196 |
+| 3.05 | 0.000 | 0.000 | 0.0139 |
 | 3.05 | 0.000 | 0.050 | 0.9995 |
 | 3.05 | 0.050 | -0.050 | 0.0000 |
-| 3.05 | 0.050 | 0.000 | 0.0196 |
+| 3.05 | 0.050 | 0.000 | 0.0139 |
 | 3.05 | 0.050 | 0.050 | 0.9995 |
 | 3.10 | -0.050 | -0.050 | 0.0000 |
 | 3.10 | -0.050 | 0.000 | 0.0000 |
-| 3.10 | -0.050 | 0.050 | 0.0196 |
+| 3.10 | -0.050 | 0.050 | 0.0139 |
 | 3.10 | 0.000 | -0.050 | 0.0000 |
 | 3.10 | 0.000 | 0.000 | 0.0000 |
-| 3.10 | 0.000 | 0.050 | 0.0196 |
+| 3.10 | 0.000 | 0.050 | 0.0139 |
 | 3.10 | 0.050 | -0.050 | 0.0000 |
 | 3.10 | 0.050 | 0.000 | 0.0000 |
-| 3.10 | 0.050 | 0.050 | 0.0196 |
+| 3.10 | 0.050 | 0.050 | 0.0139 |
 
 ## Appendix: Meta Files
 - data_proc/meta/aaa.json
@@ -234,4 +234,4 @@ _As of 2025-10-30 • Sources: AAA daily (USD/gal); EIA WPSR weekly (mmbbl); CME
 - data_proc/meta/kalshi.json
 - data_proc/meta/rbob.json
 - data_proc/meta/dataset.json
-- Submission SHA: 5bf94368892f7488d61ec601d46511317208ef42
+- Submission SHA: eaf749c711347de178433bf1d83802e6228d3024
