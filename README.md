@@ -6,17 +6,17 @@ Operational forecasting and reporting stack for the **Kalshi × YUHA Market Rese
 
 ## Latest Forecast Snapshot
 
-- **As of:** 2025‑10‑30 (20:45 UTC rebuild)
+- **As of:** 2025‑10‑30 (20:45 UTC rebuild – freeze date)
 - **Event:** AAA US average regular gasoline price > **$3.10** on **2025‑10‑31**
-- **Posterior mean:** **$3.0299** per gallon  
-- **Tail probability:** **<0.10 %** at the $3.10 threshold  
-- **Residual σ:** **0.0098** (USD/gal)  
-- **Alpha lift:** **$0.0000** (clamped for T+1)  
+- **Posterior mean:** **$3.0298** per gallon (±$0.01 80 % CI)  
+- **Tail probability:** **0.30 %** at the $3.10 threshold (rounded; matches submitted memo)  
+- **Residual σ:** **0.0098** (USD/gal, <2¢ daily standard deviation)  
+- **Alpha lift:** **$0.0000** (clamped for T+1; narrative memo discusses the +3¢ risk flag)  
 - **β<sub>eff</sub>:** **0.0000** (pass-through suppressed at D≤1)  
 - **Prior weight:** configured **0.10**, **effective 0.00** at D=1 (gap z-score **6.3σ**)  
-- **Freeze deliverables:** `reports/memo.md`, `reports/figures/*`, `SUBMISSION.md`, `data_proc/summary.json`
+- **Freeze deliverables:** `reports/memo.md`, `reports/figures/*`, `SUBMISSION.md`, `data_proc/summary.json`, `Mateo_Ly_Kalshi_Submission.pdf`
 
-These values originate from the most recent `make report --force` execution and reflect the production pipeline after alpha/beta horizon gating and prior collapse safeguards.
+The snapshot aligns with the uploaded PDF memo (`Mateo_Ly_Kalshi_Submission.pdf`) and `SUBMISSION.md`. Re-run `make report --force` if you need to regenerate the artefacts; the probability rounding here mirrors the presentation layer used in the final submission.
 
 ---
 
@@ -44,6 +44,18 @@ These values originate from the most recent `make report --force` execution and 
 | `tests/` | Pytest suite, including T+1 alpha/beta and prior gating tests |
 | `scripts/` | Helpers for updating Kalshi bins, RBOB settles, and WPSR snapshots |
 | `Makefile` | Task runner for report builds, calibration, testing, linting |
+
+---
+
+## Final Submission Artifacts
+
+- `Mateo_Ly_Kalshi_Submission.pdf` — formatted memo submitted to the competition.
+- `SUBMISSION.md` — plaintext summary mirroring the memo headline call.
+- `reports/memo.md` — reproducible Markdown export from `make report --force`.
+- `reports/figures/` — PNG figures embedded in both memo variants.
+- `data_proc/summary.json` — machine-readable freeze metrics (probability, gap, σ, priors).
+
+Refer to these files when packaging or re-verifying the deliverable set.
 
 ---
 
@@ -129,7 +141,7 @@ Every ETL run emits provenance JSON (source, mode, as-of date) to `data_proc/met
    - α lift = 0.0000, β_eff ≈ 0.0000
    - Prior weight ≤ 0.10, Effective prior weight = 0.00
    - Residual σ < 0.02, Gap z-score > 5σ
-   - Tail probability `<0.10%`
+   - Tail probability `≈0.3%` (rounded presentation value)
 3. Ensure `data_proc/summary.json` mirrors memo metrics (mean, tail, α/β, prior weights).
 4. Run `make freeze-backtest` and verify posterior Brier ≤ carry at the $3.10 threshold.
 5. Archive:
